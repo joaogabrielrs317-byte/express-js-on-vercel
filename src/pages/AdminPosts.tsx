@@ -11,11 +11,8 @@ export default function AdminPosts() {
 
   const load = () => {
     setLoading(true)
-    postsService.getAll()
-      .then(setPosts)
-      .finally(() => setLoading(false))
+    postsService.getAll().then(setPosts).finally(() => setLoading(false))
   }
-
   useEffect(load, [])
 
   const handleDelete = async (id: string, title: string) => {
@@ -32,39 +29,32 @@ export default function AdminPosts() {
   return (
     <div>
       <div className="mb-8 flex items-center justify-between">
-        <h1 className="font-display text-3xl font-semibold text-ink-950 dark:text-ink-50">Artigos</h1>
+        <h1 className="font-sans text-2xl font-bold text-ink-950 dark:text-ink-50">Artigos</h1>
         <Link
           to="/admin/artigos/novo"
-          className="flex items-center gap-2 bg-accent-600 hover:bg-accent-700 text-white font-sans text-sm px-4 py-2.5 transition-colors"
+          className="flex items-center gap-2 bg-accent-600 hover:bg-accent-700 text-white font-sans text-sm px-4 py-2.5 rounded-2xl transition-colors"
         >
-          <Plus size={15} />
-          Novo artigo
+          <Plus size={15} /> Novo artigo
         </Link>
       </div>
 
-      <div className="bg-white dark:bg-ink-900 border border-ink-100 dark:border-ink-800">
+      <div className="bg-white dark:bg-ink-900 border border-ink-100 dark:border-ink-800 rounded-3xl overflow-hidden">
         {loading ? (
           <div className="p-6 space-y-4">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="skeleton h-10 w-full" />
+              <div key={i} className="skeleton h-10 w-full rounded-2xl" />
             ))}
           </div>
         ) : posts.length === 0 ? (
           <div className="py-20 text-center">
-            <p className="font-sans text-sm text-ink-400 dark:text-ink-600 mb-4">
-              Nenhum artigo criado ainda.
-            </p>
-            <Link
-              to="/admin/artigos/novo"
-              className="font-sans text-sm text-accent-600 dark:text-accent-400 hover:underline"
-            >
+            <p className="font-sans text-sm text-ink-400 dark:text-ink-600 mb-4">Nenhum artigo criado ainda.</p>
+            <Link to="/admin/artigos/novo" className="font-sans text-sm text-accent-600 dark:text-accent-400 hover:underline">
               Criar primeiro artigo
             </Link>
           </div>
         ) : (
           <>
-            {/* Header */}
-            <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 px-5 py-3 border-b border-ink-100 dark:border-ink-800 text-xs font-sans uppercase tracking-widest text-ink-400 dark:text-ink-600">
+            <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 px-6 py-3 border-b border-ink-100 dark:border-ink-800 text-xs font-sans uppercase tracking-widest text-ink-400 dark:text-ink-600 bg-ink-50/50 dark:bg-ink-950/30">
               <span>Título</span>
               <span className="hidden md:block">Categoria</span>
               <span className="hidden sm:block">Data</span>
@@ -75,50 +65,32 @@ export default function AdminPosts() {
             {posts.map((post, i) => (
               <div
                 key={post.id}
-                className={`grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 items-center px-5 py-3 ${
+                className={`grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 items-center px-6 py-3.5 group hover:bg-ink-50/60 dark:hover:bg-ink-800/30 transition-colors ${
                   i !== 0 ? 'border-t border-ink-50 dark:border-ink-800' : ''
                 }`}
               >
-                <div className="min-w-0">
-                  <p className="font-sans text-sm text-ink-800 dark:text-ink-200 truncate">{post.title}</p>
-                </div>
-
+                <p className="font-sans text-sm text-ink-800 dark:text-ink-200 truncate">{post.title}</p>
                 <span className="hidden md:block font-sans text-xs text-ink-400 dark:text-ink-600 whitespace-nowrap">
                   {post.category?.name || '—'}
                 </span>
-
                 <span className="hidden sm:block font-sans text-xs text-ink-400 dark:text-ink-600 whitespace-nowrap">
                   {formatDateShort(post.created_at)}
                 </span>
-
-                <span className={`font-sans text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${
+                <span className={`font-sans text-xs px-2.5 py-1 rounded-full whitespace-nowrap ${
                   post.published
                     ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
                     : 'bg-ink-50 dark:bg-ink-800 text-ink-500 dark:text-ink-400'
                 }`}>
                   {post.published ? 'Publicado' : 'Rascunho'}
                 </span>
-
                 <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => handleToggle(post.id, post.published)}
-                    className="p-1.5 text-ink-400 hover:text-ink-700 dark:hover:text-ink-200 transition-colors"
-                    title={post.published ? 'Despublicar' : 'Publicar'}
-                  >
+                  <button onClick={() => handleToggle(post.id, post.published)} className="p-1.5 text-ink-400 hover:text-ink-700 dark:hover:text-ink-200 transition-colors rounded-lg" title={post.published ? 'Despublicar' : 'Publicar'}>
                     {post.published ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
-                  <Link
-                    to={`/admin/artigos/${post.id}`}
-                    className="p-1.5 text-ink-400 hover:text-ink-700 dark:hover:text-ink-200 transition-colors"
-                    title="Editar"
-                  >
+                  <Link to={`/admin/artigos/${post.id}`} className="p-1.5 text-ink-400 hover:text-ink-700 dark:hover:text-ink-200 transition-colors rounded-lg" title="Editar">
                     <Edit size={14} />
                   </Link>
-                  <button
-                    onClick={() => handleDelete(post.id, post.title)}
-                    className="p-1.5 text-ink-400 hover:text-red-600 transition-colors"
-                    title="Excluir"
-                  >
+                  <button onClick={() => handleDelete(post.id, post.title)} className="p-1.5 text-ink-400 hover:text-red-600 transition-colors rounded-lg" title="Excluir">
                     <Trash2 size={14} />
                   </button>
                 </div>

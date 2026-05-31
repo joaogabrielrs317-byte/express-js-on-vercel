@@ -18,13 +18,13 @@ Em 2024, recebeu o 2º lugar no Prêmio Tim Lopes de Jornalismo Investigativo pe
   photos: [
     {
       label: 'Foto oficial — horizontal',
-      description: 'JPG, 3000×2000px, fundo neutro',
-      url: '#', // substitua pelo link real
+      description: 'JPG, fundo neutro',
+      url: '/karol-martins.jpeg',
     },
     {
       label: 'Foto oficial — vertical',
-      description: 'JPG, 2000×3000px, fundo neutro',
-      url: '#',
+      description: 'JPG, fundo neutro',
+      url: '/karol-martins.jpeg',
     },
     {
       label: 'Foto de campo',

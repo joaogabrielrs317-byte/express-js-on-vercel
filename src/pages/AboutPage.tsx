@@ -20,7 +20,7 @@ const AUTHOR = {
   ],
   // Coloque aqui a URL da sua foto (pode ser link do Google Drive, Imgur, etc.)
   // ou deixe vazio para exibir o placeholder
-  photo: '',
+  photo: '/karol-martins.jpeg',
   // Link para o currículo em PDF (Google Drive, Dropbox, etc.)
   // Deixe vazio para ocultar o botão
   curriculum: '',

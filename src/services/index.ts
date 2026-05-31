@@ -39,11 +39,19 @@ export const postsService = {
   },
 
   async getByCategory(categorySlug: string, limit?: number) {
+    // First get the category id from the slug
+    const { data: cat, error: catError } = await supabase
+      .from('categories')
+      .select('id')
+      .eq('slug', categorySlug)
+      .single()
+    if (catError) throw catError
+
     let query = supabase
       .from('posts')
       .select('*, category:categories(*)')
       .eq('published', true)
-      .eq('categories.slug', categorySlug)
+      .eq('category_id', cat.id)
       .order('created_at', { ascending: false })
     if (limit) query = query.limit(limit)
     const { data, error } = await query

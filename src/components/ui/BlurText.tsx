@@ -1,11 +1,12 @@
 import { motion } from 'framer-motion'
+import type { ElementType } from 'react'
 
 interface BlurTextProps {
   text: string
   className?: string
   delay?: number
   duration?: number
-  as?: keyof JSX.IntrinsicElements
+  as?: ElementType
 }
 
 export default function BlurText({ text, className = '', delay = 0, duration = 0.5, as: Tag = 'span' }: BlurTextProps) {

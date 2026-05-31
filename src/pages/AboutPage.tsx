@@ -10,14 +10,13 @@ import Newsletter from '../components/common/Newsletter'
 // ─────────────────────────────────────────────
 
 const AUTHOR = {
-  name: 'Ana Beatriz Ferreira',
+  name: 'Karol Martins',
   role: 'Jornalista & Estudante de Comunicação',
   location: 'São Paulo, SP',
-  email: 'contato@anabeatriz.jor.br',
+  email: 'contato@karolmartins.jor.br',
   bio: [
-    'Estudante de Jornalismo no último ano, com foco em reportagem política e análise cultural. Acredito que o jornalismo tem a responsabilidade de iluminar o que está na sombra, dar voz a quem não é ouvido e desafiar quem tem poder.',
-    'Comecei a escrever ainda no ensino médio, quando percebi que as histórias que mais me importavam raramente chegavam aos grandes jornais. Entrei no curso de Jornalismo com a certeza de que queria aprender a contar essas histórias com rigor.',
-    'Este portfólio é o registro do meu percurso — imperfeito, honesto e em construção.',
+    'Jornalista apaixonada por contar histórias que importam. Especializada em entrevistas, reportagem investigativa e análise de conjuntura.',
+    'Este portfólio reúne meu trabalho e minha trajetória no jornalismo.',
   ],
   // Coloque aqui a URL da sua foto (pode ser link do Google Drive, Imgur, etc.)
   // ou deixe vazio para exibir o placeholder

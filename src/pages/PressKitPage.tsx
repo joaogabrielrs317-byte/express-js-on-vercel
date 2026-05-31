@@ -7,10 +7,10 @@ import { Download, FileText, Image, User, ExternalLink } from 'lucide-react'
 
 const PRESS_KIT = {
   // Bio curta para veículos usarem (até 2 linhas)
-  shortBio: 'Ana Beatriz Ferreira é jornalista e estudante de comunicação pela USP, especializada em jornalismo investigativo e análise política. Premiada pelo Prêmio Tim Lopes 2024.',
+  shortBio: 'Karol Martins é jornalista, especializada em reportagens investigativas e entrevistas.',
 
   // Bio longa para matérias/perfis
-  longBio: `Ana Beatriz Ferreira é estudante de Jornalismo na Universidade de São Paulo e estagiária na Agência Pública, onde cobre direitos humanos e políticas públicas. Seus trabalhos foram publicados no Nexo Jornal, Ponte Jornalismo e Brasil de Fato.
+  longBio: `Karol Martins é jornalista com atuação em reportagem, entrevistas e análise de conjuntura.
 
 Em 2024, recebeu o 2º lugar no Prêmio Tim Lopes de Jornalismo Investigativo pela reportagem "Invisíveis do Asfalto", sobre a gestão da crise da cracolândia em São Paulo. Acredita que o jornalismo tem a função de iluminar o que o poder prefere manter no escuro.`,
 
@@ -51,7 +51,7 @@ Em 2024, recebeu o 2º lugar no Prêmio Tim Lopes de Jornalismo Investigativo pe
 
   // Dados de contato para a imprensa
   pressContact: {
-    email: 'contato@anabeatriz.jor.br',
+    email: 'contato@karolmartins.jor.br',
     note: 'Para entrevistas, credenciamentos e colaborações editoriais.',
   },
 
@@ -293,7 +293,7 @@ export default function PressKitPage() {
               Uso dos materiais
             </p>
             <p className="font-sans text-xs text-ink-500 dark:text-ink-400 leading-relaxed">
-              Todos os materiais desta página podem ser usados livremente por veículos jornalísticos para fins editoriais, com crédito à Ana Beatriz Ferreira.
+              Todos os materiais desta página podem ser usados livremente por veículos jornalísticos para fins editoriais, com crédito à Karol Martins.
             </p>
           </div>
         </aside>

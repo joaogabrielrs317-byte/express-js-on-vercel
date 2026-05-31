@@ -32,7 +32,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="mb-8">
           <h1 className="font-display text-3xl font-bold text-ink-50 mb-1">
-            Ana Beatriz<span className="text-accent-400">.</span>
+            Karol Martins<span className="text-accent-400">.</span>
           </h1>
           <p className="font-sans text-sm text-ink-500">Painel administrativo</p>
         </div>

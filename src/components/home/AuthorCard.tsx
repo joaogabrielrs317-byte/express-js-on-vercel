@@ -16,7 +16,7 @@ export default function AuthorCard() {
           A autora
         </p>
         <h2 className="font-display text-3xl font-semibold text-ink-950 dark:text-ink-50 mb-4">
-          Ana Beatriz Ferreira
+          Karol Martins
         </h2>
         <p className="font-body text-ink-600 dark:text-ink-400 leading-relaxed mb-6">
           Estudante de Jornalismo comprometida com a apuração rigorosa e a narrativa que serve ao leitor.

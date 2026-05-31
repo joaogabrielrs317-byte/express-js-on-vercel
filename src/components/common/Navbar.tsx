@@ -64,7 +64,7 @@ export default function Navbar() {
             to="/"
             className="font-display text-xl font-bold text-ink-950 dark:text-ink-50 tracking-tight flex-shrink-0"
           >
-            Ana Beatriz<span className="text-accent-500">.</span>
+            Karol Martins<span className="text-accent-500">.</span>
           </Link>
 
           {/* Desktop nav */}

@@ -12,7 +12,7 @@ import { Mail, ExternalLink, Send, Loader, Check, MapPin } from 'lucide-react'
 const FORM_ENDPOINT = 'https://formspree.io/f/SEU_ID_AQUI'
 
 const CONTACT_INFO = {
-  email: 'contato@anabeatriz.jor.br',
+  email: 'contato@karolmartins.jor.br',
   location: 'São Paulo, SP — Brasil',
   socials: [
     { label: 'Twitter / X', url: 'https://twitter.com' },

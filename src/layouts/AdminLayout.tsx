@@ -25,7 +25,7 @@ export default function AdminLayout() {
       <aside className="w-56 bg-ink-950 dark:bg-ink-900 flex flex-col fixed h-full z-40">
         <div className="px-5 py-5 border-b border-ink-800">
           <span className="font-display text-lg font-bold text-ink-50">
-            Ana Beatriz<span className="text-accent-400">.</span>
+            Karol Martins<span className="text-accent-400">.</span>
           </span>
           <p className="font-sans text-xs text-ink-500 mt-0.5">Painel Admin</p>
         </div>

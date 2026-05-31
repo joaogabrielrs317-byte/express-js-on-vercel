@@ -17,7 +17,7 @@ export default function Footer() {
           {/* Brand */}
           <div className="md:col-span-1">
             <Link to="/" className="font-display text-2xl font-bold text-ink-950 dark:text-ink-50">
-              Ana Beatriz<span className="text-accent-500">.</span>
+              Karol Martins<span className="text-accent-500">.</span>
             </Link>
             <p className="mt-3 font-body text-sm text-ink-500 dark:text-ink-400 leading-relaxed">
               Jornalismo investigativo, análise política e histórias que importam.
@@ -33,7 +33,7 @@ export default function Footer() {
                   <ExternalLink size={10} /> {label}
                 </a>
               ))}
-              <a href="mailto:contato@anabeatriz.jor.br"
+              <a href="mailto:contato@karolmartins.jor.br"
                 className="font-sans text-xs text-ink-400 hover:text-ink-950 dark:hover:text-ink-50 transition-colors flex items-center gap-1">
                 <Mail size={10} /> Email
               </a>
@@ -90,7 +90,7 @@ export default function Footer() {
 
         <div className="mt-12 pt-8 border-t border-ink-100 dark:border-ink-800 flex flex-col md:flex-row justify-between items-center gap-3">
           <p className="font-sans text-xs text-ink-400 dark:text-ink-600">
-            © {new Date().getFullYear()} Ana Beatriz Ferreira. Todos os direitos reservados.
+            © {new Date().getFullYear()} Karol Martins. Todos os direitos reservados.
           </p>
           <p className="font-sans text-xs text-ink-300 dark:text-ink-700">Jornalismo independente</p>
         </div>

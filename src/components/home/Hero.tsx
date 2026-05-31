@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
-import { Link } from 'react-router-dom'
 import { ArrowDown } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 
@@ -16,6 +16,10 @@ export default function Hero() {
       if (data?.role) setRole(data.role)
     })
   }, [])
+
+  const scrollToPublicacoes = () => {
+    document.getElementById('publicacoes')?.scrollIntoView({ behavior: 'smooth' })
+  }
 
   return (
     <section className="min-h-[90vh] flex flex-col justify-center pt-20 pb-12 px-6">
@@ -66,12 +70,12 @@ export default function Hero() {
               transition={{ duration: 0.5, delay: 0.35 }}
               className="flex flex-wrap items-center gap-4"
             >
-              <Link
-                to="#publicacoes"
-                className="font-sans text-sm uppercase tracking-widest bg-ink-950 dark:bg-ink-100 text-ink-50 dark:text-ink-950 px-7 py-4 hover:bg-accent-700 dark:hover:bg-accent-300 transition-colors"
+              <button
+                onClick={scrollToPublicacoes}
+                className="font-sans text-sm uppercase tracking-widest bg-ink-950 dark:bg-ink-100 text-ink-50 dark:text-ink-950 px-7 py-4 hover:bg-accent-600 dark:hover:bg-accent-300 transition-colors"
               >
                 Ler matérias
-              </Link>
+              </button>
               <Link
                 to="/sobre"
                 className="font-sans text-sm uppercase tracking-widest text-ink-600 dark:text-ink-400 hover:text-ink-950 dark:hover:text-ink-50 transition-colors flex items-center gap-2"

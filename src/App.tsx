@@ -23,6 +23,7 @@ import AdminPosts from './pages/AdminPosts'
 import AdminPostEditor from './pages/AdminPostEditor'
 import AdminCategories from './pages/AdminCategories'
 import AdminNewsletter from './pages/AdminNewsletter'
+import AdminProfile from './pages/AdminProfile'
 
 export default function App() {
   return (
@@ -62,6 +63,7 @@ export default function App() {
                 <Route path="artigos" element={<AdminPosts />} />
                 <Route path="artigos/novo" element={<AdminPostEditor />} />
                 <Route path="artigos/:id" element={<AdminPostEditor />} />
+                <Route path="perfil" element={<AdminProfile />} />
                 <Route path="categorias" element={<AdminCategories />} />
                 <Route path="newsletter" element={<AdminNewsletter />} />
               </Route>

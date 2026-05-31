@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
 import { Mail, ExternalLink, BookOpen, PenTool, Mic, FileText, GraduationCap, Briefcase, Award, Download, MapPin } from 'lucide-react'
 import Newsletter from '../components/common/Newsletter'
 import { supabase } from '../lib/supabase'
+import BlurText from '../components/ui/BlurText'
+import FadeContent from '../components/ui/FadeContent'
+import CountUp from '../components/ui/CountUp'
 
 function SectionLabel({ children }: { children: string }) {
   return <p className="font-sans text-xs uppercase tracking-widest text-ink-400 dark:text-ink-600 mb-8">{children}</p>
@@ -31,9 +33,7 @@ export default function AboutPage() {
   const [profile, setProfile] = useState<any>(null)
 
   useEffect(() => {
-    supabase.from('profile').select('*').single().then(({ data }) => {
-      if (data) setProfile(data)
-    })
+    supabase.from('profile').select('*').single().then(({ data }) => { if (data) setProfile(data) })
   }, [])
 
   if (!profile) return (
@@ -52,13 +52,21 @@ export default function AboutPage() {
     profile.instagram && { label: 'Instagram', url: profile.instagram },
     profile.linkedin && { label: 'LinkedIn', url: profile.linkedin },
   ].filter(Boolean)
-
   const areaIcons = [BookOpen, PenTool, Mic, FileText]
+
+  // Stats dinâmicos baseados no perfil
+  const stats = [
+    experience.length > 0 && { value: experience.length, suffix: '+', label: 'Experiências' },
+    awards.length > 0 && { value: awards.length, suffix: '', label: 'Prêmios' },
+    skills.length > 0 && { value: skills.length, suffix: '+', label: 'Habilidades' },
+  ].filter(Boolean) as { value: number; suffix: string; label: string }[]
 
   return (
     <>
       <div className="pt-24 max-w-6xl mx-auto px-6">
-        <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="mb-20 pb-16 border-b border-ink-100 dark:border-ink-800">
+
+        {/* Header */}
+        <FadeContent className="mb-20 pb-16 border-b border-ink-100 dark:border-ink-800">
           <p className="font-sans text-xs uppercase tracking-widest text-accent-600 dark:text-accent-400 mb-8">Sobre</p>
 
           <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-12 items-start">
@@ -69,7 +77,6 @@ export default function AboutPage() {
                   : <div className="w-full h-full flex items-center justify-center text-ink-400">Sem foto</div>
                 }
               </div>
-
               <div className="flex flex-col gap-2">
                 {profile.email && (
                   <a href={`mailto:${profile.email}`} className="flex items-center gap-2 font-sans text-sm text-ink-600 dark:text-ink-400 hover:text-accent-600 transition-colors">
@@ -89,7 +96,6 @@ export default function AboutPage() {
                   ))}
                 </div>
               </div>
-
               {profile.curriculum_url && (
                 <a href={profile.curriculum_url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 font-sans text-xs uppercase tracking-widest border border-ink-950 dark:border-ink-100 text-ink-950 dark:text-ink-50 px-4 py-3 hover:bg-ink-950 hover:text-ink-50 transition-colors mt-2">
                   <Download size={13} /> Baixar currículo
@@ -98,7 +104,9 @@ export default function AboutPage() {
             </div>
 
             <div>
-              <h1 className="font-display text-5xl font-bold text-ink-950 dark:text-ink-50 leading-tight mb-2">{profile.name}</h1>
+              <h1 className="font-display text-5xl font-bold text-ink-950 dark:text-ink-50 leading-tight mb-2">
+                <BlurText text={profile.name} delay={0.1} duration={0.5} />
+              </h1>
               <p className="font-sans text-sm uppercase tracking-widest text-accent-600 dark:text-accent-400 mb-8">{profile.role}</p>
 
               <div className="flex flex-col gap-4 mb-10">
@@ -106,6 +114,20 @@ export default function AboutPage() {
                   <p key={i} className="font-body text-lg text-ink-600 dark:text-ink-400 leading-relaxed">{p}</p>
                 ))}
               </div>
+
+              {/* CountUp stats */}
+              {stats.length > 0 && (
+                <div className="flex gap-8 mb-10 pb-8 border-b border-ink-100 dark:border-ink-800">
+                  {stats.map((s, i) => (
+                    <div key={i}>
+                      <p className="font-display text-4xl font-bold text-ink-950 dark:text-ink-50">
+                        <CountUp to={s.value} suffix={s.suffix} duration={1.5} />
+                      </p>
+                      <p className="font-sans text-xs text-ink-400 mt-1">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {areas.length > 0 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -125,36 +147,32 @@ export default function AboutPage() {
               )}
             </div>
           </div>
-        </motion.div>
+        </FadeContent>
 
         {experience.length > 0 && (
-          <motion.section initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="mb-20">
+          <FadeContent delay={0.1} className="mb-20">
             <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-8">
               <div><SectionLabel>Experiência</SectionLabel><Briefcase size={20} className="text-ink-300 dark:text-ink-700" /></div>
-              <div>
-                {experience.map((item: any, i: number) => (
-                  <TimelineItem key={i} title={item.role} subtitle={item.company} period={item.period} description={item.description} last={i === experience.length - 1} />
-                ))}
-              </div>
+              <div>{experience.map((item: any, i: number) => (
+                <TimelineItem key={i} title={item.role} subtitle={item.company} period={item.period} description={item.description} last={i === experience.length - 1} />
+              ))}</div>
             </div>
-          </motion.section>
+          </FadeContent>
         )}
 
         {education.length > 0 && (
-          <motion.section initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="mb-20">
+          <FadeContent delay={0.1} className="mb-20">
             <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-8">
               <div><SectionLabel>Formação</SectionLabel><GraduationCap size={20} className="text-ink-300 dark:text-ink-700" /></div>
-              <div>
-                {education.map((item: any, i: number) => (
-                  <TimelineItem key={i} title={item.degree} subtitle={item.institution} period={item.period} description={item.description} last={i === education.length - 1} />
-                ))}
-              </div>
+              <div>{education.map((item: any, i: number) => (
+                <TimelineItem key={i} title={item.degree} subtitle={item.institution} period={item.period} description={item.description} last={i === education.length - 1} />
+              ))}</div>
             </div>
-          </motion.section>
+          </FadeContent>
         )}
 
         {awards.length > 0 && (
-          <motion.section initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="mb-20">
+          <FadeContent delay={0.1} className="mb-20">
             <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-8">
               <div><SectionLabel>Prêmios</SectionLabel><Award size={20} className="text-ink-300 dark:text-ink-700" /></div>
               <div className="flex flex-col gap-5">
@@ -169,11 +187,11 @@ export default function AboutPage() {
                 ))}
               </div>
             </div>
-          </motion.section>
+          </FadeContent>
         )}
 
         {skills.length > 0 && (
-          <motion.section initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="mb-20 pb-20 border-b border-ink-100 dark:border-ink-800">
+          <FadeContent delay={0.1} className="mb-20 pb-20 border-b border-ink-100 dark:border-ink-800">
             <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-8">
               <div><SectionLabel>Habilidades</SectionLabel></div>
               <div className="flex flex-wrap gap-2">
@@ -182,7 +200,7 @@ export default function AboutPage() {
                 ))}
               </div>
             </div>
-          </motion.section>
+          </FadeContent>
         )}
       </div>
       <Newsletter />

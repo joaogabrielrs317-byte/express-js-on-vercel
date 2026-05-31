@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, FileText, FolderOpen, Users, LogOut, Plus, UserCircle } from 'lucide-react'
+import { LayoutDashboard, FileText, FolderOpen, Users, LogOut, Plus, UserCircle, Newspaper } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
 const NAV = [
@@ -7,6 +7,7 @@ const NAV = [
   { to: '/admin/perfil', label: 'Meu Perfil', icon: UserCircle },
   { to: '/admin/artigos', label: 'Artigos', icon: FileText },
   { to: '/admin/artigos/novo', label: 'Novo artigo', icon: Plus },
+  { to: '/admin/clipping', label: 'Clipping', icon: Newspaper },
   { to: '/admin/categorias', label: 'Categorias', icon: FolderOpen },
   { to: '/admin/newsletter', label: 'Newsletter', icon: Users },
 ]

@@ -24,6 +24,7 @@ import AdminPostEditor from './pages/AdminPostEditor'
 import AdminCategories from './pages/AdminCategories'
 import AdminNewsletter from './pages/AdminNewsletter'
 import AdminProfile from './pages/AdminProfile'
+import AdminClipping from './pages/AdminClipping'
 
 export default function App() {
   return (
@@ -64,6 +65,7 @@ export default function App() {
                 <Route path="artigos/novo" element={<AdminPostEditor />} />
                 <Route path="artigos/:id" element={<AdminPostEditor />} />
                 <Route path="perfil" element={<AdminProfile />} />
+                <Route path="clipping" element={<AdminClipping />} />
                 <Route path="categorias" element={<AdminCategories />} />
                 <Route path="newsletter" element={<AdminNewsletter />} />
               </Route>

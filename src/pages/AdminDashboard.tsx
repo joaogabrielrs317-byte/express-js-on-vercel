@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   FileText, Eye, EyeOff, Users, Plus, UserCircle,
-  Newspaper, FolderOpen, ArrowRight, TrendingUp
+  Newspaper, FolderOpen, ArrowRight, TrendingUp,
+  LayoutDashboard, PenSquare
 } from 'lucide-react'
 import type { Post } from '../types'
 import { postsService, newsletterService } from '../services'
 import { formatDateShort } from '../utils'
+import GooeyNav from '../components/ui/GooeyNav'
 
 // ─── Bento primitives ────────────────────────────────────────────────────────
 
@@ -86,14 +88,16 @@ function StatCard({
   )
 }
 
-// ─── Quick access links ───────────────────────────────────────────────────────
+// ─── GooeyNav items ──────────────────────────────────────────────────────────
 
-const QUICK_LINKS = [
-  { to: '/admin/perfil',     label: 'Meu Perfil',   icon: UserCircle,  desc: 'Edite sua bio e redes' },
-  { to: '/admin/artigos',    label: 'Artigos',       icon: FileText,    desc: 'Gerencie publicações' },
-  { to: '/admin/clipping',   label: 'Clipping',      icon: Newspaper,   desc: 'Publicações externas' },
-  { to: '/admin/categorias', label: 'Categorias',    icon: FolderOpen,  desc: 'Organize por tema' },
-  { to: '/admin/newsletter', label: 'Newsletter',    icon: Users,       desc: 'Lista de assinantes' },
+const NAV_ITEMS = [
+  { label: 'Painel',      href: '/admin',             icon: <LayoutDashboard size={15} /> },
+  { label: 'Perfil',      href: '/admin/perfil',       icon: <UserCircle size={15} /> },
+  { label: 'Artigos',     href: '/admin/artigos',      icon: <FileText size={15} /> },
+  { label: 'Novo artigo', href: '/admin/artigos/novo', icon: <PenSquare size={15} /> },
+  { label: 'Clipping',    href: '/admin/clipping',     icon: <Newspaper size={15} /> },
+  { label: 'Categorias',  href: '/admin/categorias',   icon: <FolderOpen size={15} /> },
+  { label: 'Newsletter',  href: '/admin/newsletter',   icon: <Users size={15} /> },
 ]
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
@@ -102,6 +106,7 @@ export default function AdminDashboard() {
   const [posts, setPosts] = useState<Post[]>([])
   const [subscriberCount, setSubscriberCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
 
   useEffect(() => {
     Promise.all([postsService.getAll(), newsletterService.getAll()])
@@ -119,8 +124,8 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-8">
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="font-display text-3xl font-semibold text-ink-950 dark:text-ink-50">
             Painel
@@ -139,52 +144,27 @@ export default function AdminDashboard() {
         </Link>
       </div>
 
-      {/* ── Bento grid ─────────────────────────────────────────────────────── */}
+      {/* ── GooeyNav ── */}
+      <GooeyNav
+        items={NAV_ITEMS}
+        activeIndex={0}
+        onItemClick={(_, item) => navigate(item.href)}
+        particleCount={14}
+        particleSize={7}
+        colors={['#4f46e5', '#818cf8', '#6366f1', '#a5b4fc', '#c7d2fe']}
+        className="w-full overflow-hidden"
+      />
+
+      {/* ── Bento grid ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
 
-        {/* Stat cards – row 1 */}
+        {/* Stat cards */}
         <StatCard label="Total de artigos" value={posts.length}    icon={FileText} loading={loading} accent />
         <StatCard label="Publicados"        value={published}       icon={Eye}      loading={loading} />
         <StatCard label="Rascunhos"         value={drafts}          icon={EyeOff}   loading={loading} />
         <StatCard label="Assinantes"        value={subscriberCount} icon={Users}    loading={loading} />
 
-        {/* Quick links – spans full width */}
-        <BentoCard className="col-span-2 md:col-span-4">
-          <p className="font-sans text-xs font-medium text-ink-400 dark:text-ink-500 uppercase tracking-widest mb-5">
-            Acesso rápido
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-            {QUICK_LINKS.map(({ to, label, icon: Icon, desc }) => (
-              <Link
-                key={to}
-                to={to}
-                className="
-                  group flex flex-col gap-3 rounded-2xl border border-ink-100 dark:border-ink-800
-                  bg-ink-50 dark:bg-ink-950 p-4 hover:border-accent-300 dark:hover:border-accent-700
-                  hover:bg-accent-50 dark:hover:bg-accent-950/30 transition-all
-                "
-              >
-                <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl
-                                 bg-white dark:bg-ink-900 text-accent-600 dark:text-accent-400
-                                 border border-ink-100 dark:border-ink-800 shadow-sm
-                                 group-hover:bg-accent-600 group-hover:text-white dark:group-hover:bg-accent-600
-                                 transition-all">
-                  <Icon size={16} />
-                </span>
-                <div>
-                  <p className="font-sans text-sm font-medium text-ink-800 dark:text-ink-200 leading-tight">
-                    {label}
-                  </p>
-                  <p className="font-sans text-xs text-ink-400 dark:text-ink-600 mt-0.5 leading-tight">
-                    {desc}
-                  </p>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </BentoCard>
-
-        {/* Recent posts – col-span 3 */}
+        {/* Recent posts — col-span 3 */}
         <BentoCard className="col-span-2 md:col-span-3 p-0">
           <div className="px-6 py-4 border-b border-ink-100 dark:border-ink-800 flex items-center justify-between">
             <h2 className="font-sans text-sm font-medium text-ink-700 dark:text-ink-300">
@@ -233,7 +213,7 @@ export default function AdminDashboard() {
           </div>
         </BentoCard>
 
-        {/* Status card – col-span 1 */}
+        {/* Status card — col-span 1 */}
         <BentoCard className="col-span-2 md:col-span-1 justify-between bg-ink-950 dark:bg-ink-800 border-ink-900">
           <div>
             <p className="font-sans text-xs text-ink-500 uppercase tracking-widest mb-4">
@@ -246,7 +226,6 @@ export default function AdminDashboard() {
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Published bar */}
                 <div>
                   <div className="flex justify-between mb-1.5">
                     <span className="font-sans text-xs text-ink-400">Publicados</span>
@@ -259,7 +238,6 @@ export default function AdminDashboard() {
                     />
                   </div>
                 </div>
-                {/* Drafts bar */}
                 <div>
                   <div className="flex justify-between mb-1.5">
                     <span className="font-sans text-xs text-ink-400">Rascunhos</span>
@@ -277,11 +255,8 @@ export default function AdminDashboard() {
           </div>
           <Link
             to="/admin/artigos/novo"
-            className="
-              mt-6 flex items-center justify-center gap-2
-              rounded-2xl bg-accent-600 hover:bg-accent-500
-              text-white font-sans text-sm py-2.5 transition-colors
-            "
+            className="mt-6 flex items-center justify-center gap-2 rounded-2xl bg-accent-600
+                       hover:bg-accent-500 text-white font-sans text-sm py-2.5 transition-colors"
           >
             <Plus size={14} /> Novo artigo
           </Link>

@@ -4,8 +4,7 @@ import {
   Save, Eye, Upload, Loader, ArrowLeft, Plus, X,
   Type, Heading1, Heading2, Heading3,
   Quote, List, ListOrdered, Video, Image as ImageIcon,
-  GripVertical, Trash2, ChevronDown, Link as LinkIcon,
-  Bold, Italic, Underline
+  GripVertical, Trash2, ChevronDown
 } from 'lucide-react'
 import { postsService, categoriesService } from '../services'
 import { slugify, estimateReadingTime } from '../utils'

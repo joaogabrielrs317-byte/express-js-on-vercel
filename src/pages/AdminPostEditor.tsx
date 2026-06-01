@@ -1,6 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Save, Eye, Upload, Loader, ArrowLeft, Bold, Italic, Heading2, List, Quote, Link as LinkIcon, Video, X } from 'lucide-react'
+import {
+  Save, Eye, Upload, Loader, ArrowLeft,
+  Bold, Italic, Underline, Strikethrough,
+  Heading1, Heading2, Heading3,
+  AlignLeft, AlignCenter, AlignRight, AlignJustify,
+  List, ListOrdered, Quote, Link as LinkIcon,
+  Video, X, Unlink
+} from 'lucide-react'
 import { postsService, categoriesService } from '../services'
 import { slugify, estimateReadingTime } from '../utils'
 import { buildEmbedHtml } from '../utils/embed'
@@ -9,11 +16,40 @@ import type { Category } from '../types'
 const INPUT = "w-full font-sans text-sm bg-ink-50 dark:bg-ink-800 border border-ink-200 dark:border-ink-700 rounded-2xl px-4 py-2.5 text-ink-900 dark:text-ink-100 focus:outline-none focus:border-accent-500 transition-colors"
 const CARD = "bg-white dark:bg-ink-900 border border-ink-100 dark:border-ink-800 rounded-3xl p-5"
 
+interface ToolbarButtonProps {
+  onClick: () => void
+  title: string
+  active?: boolean
+  children: React.ReactNode
+}
+
+function ToolbarButton({ onClick, title, active, children }: ToolbarButtonProps) {
+  return (
+    <button
+      type="button"
+      onMouseDown={(e) => { e.preventDefault(); onClick() }}
+      title={title}
+      className={`p-2 rounded-xl transition-colors ${
+        active
+          ? 'bg-accent-100 dark:bg-accent-900/40 text-accent-600 dark:text-accent-400'
+          : 'text-ink-400 hover:text-ink-700 dark:hover:text-ink-200 hover:bg-ink-100 dark:hover:bg-ink-800'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function ToolbarDivider() {
+  return <div className="w-px h-5 bg-ink-200 dark:bg-ink-700 mx-1" />
+}
+
 export default function AdminPostEditor() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const isNew = !id || id === 'novo'
   const fileRef = useRef<HTMLInputElement>(null)
+  const editorRef = useRef<HTMLDivElement>(null)
 
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(!isNew)
@@ -24,6 +60,11 @@ export default function AdminPostEditor() {
   const [videoModal, setVideoModal] = useState(false)
   const [videoUrl, setVideoUrl] = useState('')
   const [videoTitle, setVideoTitle] = useState('')
+  const [linkModal, setLinkModal] = useState(false)
+  const [linkUrl, setLinkUrl] = useState('')
+  const [linkText, setLinkText] = useState('')
+  const [savedSelection, setSavedSelection] = useState<Range | null>(null)
+  const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set())
 
   const [form, setForm] = useState({
     title: '', subtitle: '', slug: '', excerpt: '', content: '',
@@ -35,10 +76,38 @@ export default function AdminPostEditor() {
     setForm(f => {
       const next = { ...f, [key]: value }
       if (key === 'title' && isNew) next.slug = slugify(value)
-      if (key === 'content') next.reading_time = estimateReadingTime(value)
       return next
     })
   }
+
+  // Sync editor content to form
+  const syncContent = useCallback(() => {
+    if (editorRef.current) {
+      const html = editorRef.current.innerHTML
+      setForm(f => ({ ...f, content: html, reading_time: estimateReadingTime(editorRef.current?.innerText || '') }))
+    }
+  }, [])
+
+  // Update active formats on selection change
+  const updateActiveFormats = useCallback(() => {
+    const formats = new Set<string>()
+    if (document.queryCommandState('bold')) formats.add('bold')
+    if (document.queryCommandState('italic')) formats.add('italic')
+    if (document.queryCommandState('underline')) formats.add('underline')
+    if (document.queryCommandState('strikeThrough')) formats.add('strikethrough')
+    if (document.queryCommandState('justifyLeft')) formats.add('left')
+    if (document.queryCommandState('justifyCenter')) formats.add('center')
+    if (document.queryCommandState('justifyRight')) formats.add('right')
+    if (document.queryCommandState('justifyFull')) formats.add('justify')
+    if (document.queryCommandState('insertUnorderedList')) formats.add('ul')
+    if (document.queryCommandState('insertOrderedList')) formats.add('ol')
+    setActiveFormats(formats)
+  }, [])
+
+  useEffect(() => {
+    document.addEventListener('selectionchange', updateActiveFormats)
+    return () => document.removeEventListener('selectionchange', updateActiveFormats)
+  }, [updateActiveFormats])
 
   useEffect(() => {
     categoriesService.getAll().then(setCategories).catch(() => {})
@@ -50,9 +119,80 @@ export default function AdminPostEditor() {
           category_id: post.category_id || '', tags: post.tags?.join(', ') || '',
           published: post.published || false, featured: post.featured || false, reading_time: post.reading_time || 1,
         })
+        // Set editor content after mount
+        setTimeout(() => {
+          if (editorRef.current && post.content) {
+            editorRef.current.innerHTML = post.content
+          }
+        }, 100)
       }).catch(() => navigate('/admin/artigos')).finally(() => setLoading(false))
     }
   }, [id])
+
+  const exec = (command: string, value?: string) => {
+    editorRef.current?.focus()
+    document.execCommand(command, false, value)
+    syncContent()
+    updateActiveFormats()
+  }
+
+  const insertHeading = (tag: 'h1' | 'h2' | 'h3') => {
+    editorRef.current?.focus()
+    document.execCommand('formatBlock', false, tag)
+    syncContent()
+  }
+
+  const insertBlockquote = () => {
+    editorRef.current?.focus()
+    document.execCommand('formatBlock', false, 'blockquote')
+    syncContent()
+  }
+
+  const saveSelection = () => {
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0) {
+      setSavedSelection(sel.getRangeAt(0).cloneRange())
+      setLinkText(sel.toString())
+    }
+  }
+
+  const restoreSelection = (range: Range | null) => {
+    if (!range) return
+    const sel = window.getSelection()
+    if (sel) {
+      sel.removeAllRanges()
+      sel.addRange(range)
+    }
+  }
+
+  const handleInsertLink = () => {
+    if (!linkUrl.trim()) return
+    restoreSelection(savedSelection)
+    editorRef.current?.focus()
+    if (savedSelection && !savedSelection.collapsed) {
+      document.execCommand('createLink', false, linkUrl)
+    } else {
+      const text = linkText || linkUrl
+      document.execCommand('insertHTML', false, `<a href="${linkUrl}" target="_blank">${text}</a>`)
+    }
+    syncContent()
+    setLinkModal(false)
+    setLinkUrl('')
+    setLinkText('')
+    setSavedSelection(null)
+  }
+
+  const handleInsertVideo = () => {
+    if (!videoUrl.trim()) return
+    const html = buildEmbedHtml(videoUrl, videoTitle)
+    if (!html) { alert('URL inválida. Use YouTube ou Vimeo.'); return }
+    editorRef.current?.focus()
+    document.execCommand('insertHTML', false, html)
+    syncContent()
+    setVideoModal(false)
+    setVideoUrl('')
+    setVideoTitle('')
+  }
 
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return
@@ -62,28 +202,17 @@ export default function AdminPostEditor() {
     finally { setUploading(false) }
   }
 
-  const insertFormat = (before: string, after: string = '') => {
-    const ta = document.getElementById('content-area') as HTMLTextAreaElement
-    if (!ta) return
-    const start = ta.selectionStart; const end = ta.selectionEnd
-    const selected = form.content.slice(start, end)
-    set('content', form.content.slice(0, start) + before + selected + after + form.content.slice(end))
-    setTimeout(() => { ta.focus(); ta.setSelectionRange(start + before.length, end + before.length) }, 0)
-  }
-
-  const handleInsertVideo = () => {
-    if (!videoUrl.trim()) return
-    const html = buildEmbedHtml(videoUrl, videoTitle)
-    if (!html) { alert('URL de vídeo inválida. Use YouTube ou Vimeo.'); return }
-    set('content', form.content + '\n' + html + '\n')
-    setVideoModal(false); setVideoUrl(''); setVideoTitle('')
-  }
-
   const handleSave = async (publish?: boolean) => {
     if (!form.title.trim()) { setError('O título é obrigatório.'); return }
     setError(''); setSaving(true)
     try {
-      const data = { ...form, tags: form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [], published: publish !== undefined ? publish : form.published }
+      const content = editorRef.current?.innerHTML || form.content
+      const data = {
+        ...form,
+        content,
+        tags: form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+        published: publish !== undefined ? publish : form.published
+      }
       if (isNew) { const created = await postsService.create(data); navigate(`/admin/artigos/${created.id}`) }
       else await postsService.update(id!, data)
     } catch (e: any) { setError(e.message || 'Erro ao salvar.') }
@@ -110,7 +239,7 @@ export default function AdminPostEditor() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setPreview(v => !v)} className={`flex items-center gap-1.5 font-sans text-sm px-3 py-2 rounded-2xl border transition-colors ${preview ? 'border-accent-500 text-accent-600 bg-accent-50 dark:bg-accent-900/20' : 'border-ink-200 dark:border-ink-700 text-ink-600 dark:text-ink-400'}`}>
-            <Eye size={14} /> Preview
+            <Eye size={14} /> {preview ? 'Editar' : 'Preview'}
           </button>
           <button onClick={() => handleSave(false)} disabled={saving} className="flex items-center gap-1.5 font-sans text-sm px-3 py-2 rounded-2xl border border-ink-200 dark:border-ink-700 text-ink-600 dark:text-ink-400 hover:border-ink-400 transition-colors disabled:opacity-50">
             {saving ? <Loader size={14} className="animate-spin" /> : <Save size={14} />} Rascunho
@@ -130,38 +259,81 @@ export default function AdminPostEditor() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-5">
         {/* Editor */}
         <div className="space-y-4">
+          {/* Título e subtítulo */}
           <div className={CARD + ' space-y-4'}>
-            <input type="text" value={form.title} onChange={e => set('title', e.target.value)} placeholder="Título do artigo"
-              className="w-full font-sans text-2xl font-bold text-ink-950 dark:text-ink-50 bg-transparent placeholder-ink-200 dark:placeholder-ink-700 outline-none border-b border-ink-100 dark:border-ink-800 pb-3" />
-            <input type="text" value={form.subtitle} onChange={e => set('subtitle', e.target.value)} placeholder="Subtítulo (opcional)"
-              className="w-full font-sans text-base italic text-ink-600 dark:text-ink-400 bg-transparent placeholder-ink-200 dark:placeholder-ink-700 outline-none" />
+            <input
+              type="text"
+              value={form.title}
+              onChange={e => set('title', e.target.value)}
+              placeholder="Título do artigo"
+              className="w-full font-sans text-2xl font-bold text-ink-950 dark:text-ink-50 bg-transparent placeholder-ink-200 dark:placeholder-ink-700 outline-none border-b border-ink-100 dark:border-ink-800 pb-3"
+            />
+            <input
+              type="text"
+              value={form.subtitle}
+              onChange={e => set('subtitle', e.target.value)}
+              placeholder="Subtítulo (opcional)"
+              className="w-full font-sans text-base italic text-ink-600 dark:text-ink-400 bg-transparent placeholder-ink-200 dark:placeholder-ink-700 outline-none"
+            />
           </div>
 
+          {/* Editor WYSIWYG */}
           <div className={CARD + ' !p-0 overflow-hidden'}>
-            <div className="flex items-center gap-1 px-4 py-2.5 border-b border-ink-100 dark:border-ink-800 bg-ink-50/50 dark:bg-ink-950/30 flex-wrap">
-              {[
-                { icon: Bold, label: 'Negrito', action: () => insertFormat('<strong>', '</strong>') },
-                { icon: Italic, label: 'Itálico', action: () => insertFormat('<em>', '</em>') },
-                { icon: Heading2, label: 'Título', action: () => insertFormat('<h2>', '</h2>') },
-                { icon: List, label: 'Lista', action: () => insertFormat('<ul>\n  <li>', '</li>\n</ul>') },
-                { icon: Quote, label: 'Citação', action: () => insertFormat('<blockquote>', '</blockquote>') },
-                { icon: LinkIcon, label: 'Link', action: () => insertFormat('<a href="">', '</a>') },
-                { icon: Video, label: 'Vídeo', action: () => setVideoModal(true) },
-              ].map(({ icon: Icon, label, action }) => (
-                <button key={label} onClick={action} title={label}
-                  className="p-2 text-ink-400 hover:text-ink-700 dark:hover:text-ink-200 hover:bg-ink-100 dark:hover:bg-ink-800 rounded-xl transition-colors">
-                  <Icon size={15} />
-                </button>
-              ))}
-            </div>
+            {!preview && (
+              <div className="flex items-center gap-0.5 px-3 py-2.5 border-b border-ink-100 dark:border-ink-800 bg-ink-50/50 dark:bg-ink-950/30 flex-wrap">
+                {/* Títulos */}
+                <ToolbarButton onClick={() => insertHeading('h1')} title="Título grande (H1)"><Heading1 size={15} /></ToolbarButton>
+                <ToolbarButton onClick={() => insertHeading('h2')} title="Subtítulo 1 (H2)"><Heading2 size={15} /></ToolbarButton>
+                <ToolbarButton onClick={() => insertHeading('h3')} title="Subtítulo 2 (H3)"><Heading3 size={15} /></ToolbarButton>
+
+                <ToolbarDivider />
+
+                {/* Formatação de texto */}
+                <ToolbarButton onClick={() => exec('bold')} title="Negrito" active={activeFormats.has('bold')}><Bold size={15} /></ToolbarButton>
+                <ToolbarButton onClick={() => exec('italic')} title="Itálico" active={activeFormats.has('italic')}><Italic size={15} /></ToolbarButton>
+                <ToolbarButton onClick={() => exec('underline')} title="Sublinhado" active={activeFormats.has('underline')}><Underline size={15} /></ToolbarButton>
+                <ToolbarButton onClick={() => exec('strikeThrough')} title="Tachado" active={activeFormats.has('strikethrough')}><Strikethrough size={15} /></ToolbarButton>
+
+                <ToolbarDivider />
+
+                {/* Alinhamento */}
+                <ToolbarButton onClick={() => exec('justifyLeft')} title="Alinhar à esquerda" active={activeFormats.has('left')}><AlignLeft size={15} /></ToolbarButton>
+                <ToolbarButton onClick={() => exec('justifyCenter')} title="Centralizar" active={activeFormats.has('center')}><AlignCenter size={15} /></ToolbarButton>
+                <ToolbarButton onClick={() => exec('justifyRight')} title="Alinhar à direita" active={activeFormats.has('right')}><AlignRight size={15} /></ToolbarButton>
+                <ToolbarButton onClick={() => exec('justifyFull')} title="Justificar" active={activeFormats.has('justify')}><AlignJustify size={15} /></ToolbarButton>
+
+                <ToolbarDivider />
+
+                {/* Listas */}
+                <ToolbarButton onClick={() => exec('insertUnorderedList')} title="Lista com marcadores" active={activeFormats.has('ul')}><List size={15} /></ToolbarButton>
+                <ToolbarButton onClick={() => exec('insertOrderedList')} title="Lista numerada" active={activeFormats.has('ol')}><ListOrdered size={15} /></ToolbarButton>
+                <ToolbarButton onClick={insertBlockquote} title="Citação"><Quote size={15} /></ToolbarButton>
+
+                <ToolbarDivider />
+
+                {/* Link e Vídeo */}
+                <ToolbarButton onClick={() => { saveSelection(); setLinkModal(true) }} title="Inserir link"><LinkIcon size={15} /></ToolbarButton>
+                <ToolbarButton onClick={() => exec('unlink')} title="Remover link"><Unlink size={15} /></ToolbarButton>
+                <ToolbarButton onClick={() => setVideoModal(true)} title="Inserir vídeo"><Video size={15} /></ToolbarButton>
+              </div>
+            )}
+
             {preview ? (
               <div className="p-6 min-h-[400px]">
-                <div className="prose-editorial" dangerouslySetInnerHTML={{ __html: form.content || '<p class="text-ink-400">Sem conteúdo ainda.</p>' }} />
+                <div className="prose-editorial" dangerouslySetInnerHTML={{ __html: form.content || '<p style="color:#999">Sem conteúdo ainda.</p>' }} />
               </div>
             ) : (
-              <textarea id="content-area" value={form.content} onChange={e => set('content', e.target.value)}
-                placeholder="Escreva o conteúdo em HTML…" rows={22}
-                className="w-full font-mono text-sm text-ink-800 dark:text-ink-200 bg-transparent p-5 outline-none resize-none placeholder-ink-300 dark:placeholder-ink-700" />
+              <div
+                ref={editorRef}
+                contentEditable
+                suppressContentEditableWarning
+                onInput={syncContent}
+                onKeyUp={updateActiveFormats}
+                onMouseUp={updateActiveFormats}
+                data-placeholder="Escreva o conteúdo do artigo aqui..."
+                className="min-h-[420px] p-6 outline-none prose-editorial focus:ring-0 empty:before:content-[attr(data-placeholder)] empty:before:text-ink-300 dark:empty:before:text-ink-700"
+                style={{ whiteSpace: 'pre-wrap' }}
+              />
             )}
           </div>
         </div>
@@ -220,7 +392,33 @@ export default function AdminPostEditor() {
         </div>
       </div>
 
-      {/* Video modal */}
+      {/* Modal de Link */}
+      {linkModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center px-4">
+          <div className="bg-white dark:bg-ink-900 border border-ink-200 dark:border-ink-700 rounded-3xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-sans text-sm font-semibold text-ink-950 dark:text-ink-50">Inserir link</h3>
+              <button onClick={() => setLinkModal(false)} className="p-2 text-ink-400 hover:text-ink-700 rounded-xl transition-colors"><X size={16} /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="font-sans text-xs uppercase tracking-widest text-ink-400 mb-1.5 block">URL *</label>
+                <input type="url" autoFocus value={linkUrl} onChange={e => setLinkUrl(e.target.value)} placeholder="https://exemplo.com" className={INPUT} />
+              </div>
+              <div>
+                <label className="font-sans text-xs uppercase tracking-widest text-ink-400 mb-1.5 block">Texto do link</label>
+                <input type="text" value={linkText} onChange={e => setLinkText(e.target.value)} placeholder="Texto visível (opcional)" className={INPUT} />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button onClick={handleInsertLink} className="flex-1 bg-accent-600 hover:bg-accent-700 text-white font-sans text-sm py-2.5 rounded-2xl transition-colors">Inserir link</button>
+                <button onClick={() => setLinkModal(false)} className="px-4 border border-ink-200 dark:border-ink-700 text-ink-600 dark:text-ink-400 font-sans text-sm rounded-2xl hover:border-ink-400 transition-colors">Cancelar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Vídeo */}
       {videoModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center px-4">
           <div className="bg-white dark:bg-ink-900 border border-ink-200 dark:border-ink-700 rounded-3xl w-full max-w-md p-6">

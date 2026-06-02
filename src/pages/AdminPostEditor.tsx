@@ -1,386 +1,290 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useEditor, EditorContent, BubbleMenu, FloatingMenu } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import Underline from '@tiptap/extension-underline'
+import TextAlign from '@tiptap/extension-text-align'
+import Link from '@tiptap/extension-link'
+import Image from '@tiptap/extension-image'
+import Placeholder from '@tiptap/extension-placeholder'
+import CharacterCount from '@tiptap/extension-character-count'
 import {
-  Save, Eye, Upload, Loader, ArrowLeft, Plus,
-  Type, Heading2, Heading3,
-  Quote, List, ListOrdered, Video, Image as ImageIcon,
-  Trash2, ChevronDown, X, Check, Globe, EyeOff,
-  Sparkles, Hash, AlignLeft
+  Save, Eye, Upload, Loader, ArrowLeft, X, Check,
+  Globe, EyeOff, Sparkles,
+  Bold, Italic, UnderlineIcon, Strikethrough,
+  Heading2, Heading3, Quote, List, ListOrdered,
+  AlignLeft, AlignCenter, AlignRight,
+  Link as LinkIcon, Image as ImageIcon, Minus,
+  Type, RotateCcw, RotateCw
 } from 'lucide-react'
 import { postsService, categoriesService } from '../services'
 import { slugify, estimateReadingTime } from '../utils'
-import { buildEmbedHtml } from '../utils/embed'
+import { buildEmbedHtml, getEmbedUrl } from '../utils/embed'
 import type { Category } from '../types'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Toolbar Button ───────────────────────────────────────────────────────────
 
-type BlockType =
-  | 'paragraph' | 'h2' | 'h3'
-  | 'blockquote' | 'ul' | 'ol'
-  | 'video' | 'image' | 'divider'
-
-interface Block {
-  id: string
-  type: BlockType
-  content: string
-  caption?: string
-}
-
-function uid() { return Math.random().toString(36).slice(2, 10) }
-
-function blocksToHtml(blocks: Block[]): string {
-  return blocks.map(b => {
-    switch (b.type) {
-      case 'paragraph':   return `<p>${b.content}</p>`
-      case 'h2':          return `<h2>${b.content}</h2>`
-      case 'h3':          return `<h3>${b.content}</h3>`
-      case 'blockquote':  return `<blockquote>${b.content}</blockquote>`
-      case 'ul':          return `<ul>${b.content.split('\n').filter(Boolean).map(l => `<li>${l}</li>`).join('')}</ul>`
-      case 'ol':          return `<ol>${b.content.split('\n').filter(Boolean).map(l => `<li>${l}</li>`).join('')}</ol>`
-      case 'video':       return buildEmbedHtml(b.content, b.caption)
-      case 'image':       return `<figure><img src="${b.content}" alt="${b.caption || ''}" style="width:100%;border-radius:4px;" />${b.caption ? `<figcaption style="text-align:center;font-size:0.85rem;color:#888;margin-top:0.5rem;">${b.caption}</figcaption>` : ''}</figure>`
-      case 'divider':     return `<hr />`
-      default:            return ''
-    }
-  }).join('\n')
-}
-
-function htmlToBlocks(html: string): Block[] {
-  if (!html.trim()) return [{ id: uid(), type: 'paragraph', content: '' }]
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(html, 'text/html')
-  const blocks: Block[] = []
-  doc.body.childNodes.forEach(node => {
-    if (node.nodeType !== Node.ELEMENT_NODE) return
-    const el = node as HTMLElement
-    const tag = el.tagName.toLowerCase()
-    if (tag === 'p') blocks.push({ id: uid(), type: 'paragraph', content: el.innerHTML })
-    else if (tag === 'h2') blocks.push({ id: uid(), type: 'h2', content: el.textContent || '' })
-    else if (tag === 'h3') blocks.push({ id: uid(), type: 'h3', content: el.textContent || '' })
-    else if (tag === 'blockquote') blocks.push({ id: uid(), type: 'blockquote', content: el.textContent || '' })
-    else if (tag === 'ul') blocks.push({ id: uid(), type: 'ul', content: Array.from(el.querySelectorAll('li')).map(li => li.textContent).join('\n') })
-    else if (tag === 'ol') blocks.push({ id: uid(), type: 'ol', content: Array.from(el.querySelectorAll('li')).map(li => li.textContent).join('\n') })
-    else if (tag === 'hr') blocks.push({ id: uid(), type: 'divider', content: '' })
-    else if (tag === 'figure') {
-      const img = el.querySelector('img')
-      const cap = el.querySelector('figcaption')
-      if (img) blocks.push({ id: uid(), type: 'image', content: img.src, caption: cap?.textContent || '' })
-    }
-  })
-  return blocks.length > 0 ? blocks : [{ id: uid(), type: 'paragraph', content: '' }]
-}
-
-// ─── Block config ─────────────────────────────────────────────────────────────
-
-const BLOCK_TYPES = [
-  { type: 'paragraph' as BlockType,  label: 'Parágrafo',  icon: AlignLeft,     shortcut: 'P' },
-  { type: 'h2' as BlockType,         label: 'Título',     icon: Heading2,      shortcut: 'H2' },
-  { type: 'h3' as BlockType,         label: 'Subtítulo',  icon: Heading3,      shortcut: 'H3' },
-  { type: 'blockquote' as BlockType, label: 'Citação',    icon: Quote,         shortcut: 'Q' },
-  { type: 'ul' as BlockType,         label: 'Lista •',    icon: List,          shortcut: 'UL' },
-  { type: 'ol' as BlockType,         label: 'Lista 1.',   icon: ListOrdered,   shortcut: 'OL' },
-  { type: 'image' as BlockType,      label: 'Imagem',     icon: ImageIcon,     shortcut: 'IMG' },
-  { type: 'video' as BlockType,      label: 'Vídeo',      icon: Video,         shortcut: 'VID' },
-  { type: 'divider' as BlockType,    label: 'Divisor',    icon: Hash,          shortcut: '—' },
-]
-
-const PLACEHOLDERS: Partial<Record<BlockType, string>> = {
-  paragraph:  'Escreva aqui… (Enter para novo bloco, / para mudar tipo)',
-  h2:         'Título da seção',
-  h3:         'Subtítulo',
-  blockquote: 'Citação ou destaque…',
-  ul:         'Item 1\nItem 2\nItem 3',
-  ol:         'Passo 1\nPasso 2\nPasso 3',
-  image:      'Cole a URL da imagem…',
-  video:      'Cole a URL do YouTube ou Vimeo…',
-}
-
-// ─── Slash Command Menu ───────────────────────────────────────────────────────
-
-function SlashMenu({ onSelect, onClose }: {
-  onSelect: (type: BlockType) => void
-  onClose: () => void
-}) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [query, setQuery] = useState('')
-  const filtered = BLOCK_TYPES.filter(b =>
-    b.label.toLowerCase().includes(query.toLowerCase())
-  )
-
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', handleKey)
-    return () => document.removeEventListener('keydown', handleKey)
-  }, [onClose])
-
-  useEffect(() => {
-    function handle(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
-    }
-    document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
-  }, [onClose])
-
-  return (
-    <div
-      ref={ref}
-      className="absolute left-0 top-full mt-2 z-50 w-56 bg-white dark:bg-ink-900 border border-ink-150 dark:border-ink-700 shadow-2xl rounded-2xl overflow-hidden"
-      style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.12)' }}
-    >
-      <div className="px-3 py-2 border-b border-ink-100 dark:border-ink-800">
-        <input
-          autoFocus
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Filtrar blocos…"
-          className="w-full text-xs font-sans bg-transparent text-ink-700 dark:text-ink-300 placeholder-ink-300 outline-none"
-        />
-      </div>
-      <div className="py-1 max-h-64 overflow-y-auto">
-        {filtered.map(({ type, label, icon: Icon, shortcut }) => (
-          <button
-            key={type}
-            onMouseDown={e => { e.preventDefault(); onSelect(type); onClose() }}
-            className="w-full flex items-center gap-3 px-3 py-2 hover:bg-accent-50 dark:hover:bg-accent-900/20 transition-colors group text-left"
-          >
-            <span className="w-7 h-7 rounded-lg bg-ink-50 dark:bg-ink-800 flex items-center justify-center flex-shrink-0 group-hover:bg-accent-100 dark:group-hover:bg-accent-900/40 transition-colors">
-              <Icon size={13} className="text-ink-500 dark:text-ink-400 group-hover:text-accent-600 dark:group-hover:text-accent-400" />
-            </span>
-            <span className="flex-1 font-sans text-sm text-ink-700 dark:text-ink-300">{label}</span>
-            <span className="font-mono text-[10px] text-ink-300 dark:text-ink-600">{shortcut}</span>
-          </button>
-        ))}
-        {filtered.length === 0 && (
-          <p className="text-center py-4 text-xs text-ink-400 font-sans">Nenhum resultado</p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ─── Single Block ─────────────────────────────────────────────────────────────
-
-function BlockEditor({
-  block, isFirst, isLast,
-  onChange, onDelete, onTypeChange,
-  onAddAfter, onMoveUp, onMoveDown,
+function ToolBtn({
+  onClick, active, disabled, title, children
 }: {
-  block: Block
-  isFirst: boolean
-  isLast: boolean
-  onChange: (content: string, caption?: string) => void
-  onDelete: () => void
-  onTypeChange: (type: BlockType) => void
-  onAddAfter: (type?: BlockType) => void
-  onMoveUp: () => void
-  onMoveDown: () => void
+  onClick: () => void
+  active?: boolean
+  disabled?: boolean
+  title: string
+  children: React.ReactNode
 }) {
-  const [showSlash, setShowSlash] = useState(false)
-  const [hovered, setHovered] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  return (
+    <button
+      onMouseDown={e => { e.preventDefault(); onClick() }}
+      disabled={disabled}
+      title={title}
+      className={`
+        flex items-center justify-center w-8 h-8 rounded-lg transition-all text-sm
+        ${active
+          ? 'bg-accent-100 dark:bg-accent-900/40 text-accent-700 dark:text-accent-300'
+          : 'text-ink-500 dark:text-ink-400 hover:bg-ink-100 dark:hover:bg-ink-800 hover:text-ink-900 dark:hover:text-ink-100'
+        }
+        disabled:opacity-30 disabled:cursor-not-allowed
+      `}
+    >
+      {children}
+    </button>
+  )
+}
 
-  const resize = useCallback(() => {
-    const el = textareaRef.current
-    if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px' }
-  }, [])
+function ToolDivider() {
+  return <div className="w-px h-5 bg-ink-200 dark:bg-ink-700 mx-0.5 flex-shrink-0" />
+}
 
-  useEffect(() => { resize() }, [block.content, resize])
+// ─── Main Toolbar ─────────────────────────────────────────────────────────────
 
-  // ── Divider ──
-  if (block.type === 'divider') {
-    return (
-      <div
-        className="relative flex items-center gap-3 py-3 group"
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-      >
-        <div className="flex-1 flex items-center gap-3">
-          <div className="flex-1 h-px bg-ink-200 dark:bg-ink-700" />
-          <span className="text-ink-300 dark:text-ink-600 text-xs font-sans">✦</span>
-          <div className="flex-1 h-px bg-ink-200 dark:bg-ink-700" />
-        </div>
-        <button
-          onMouseDown={e => { e.preventDefault(); onDelete() }}
-          className={`transition-all p-1 text-ink-300 hover:text-red-500 rounded-lg ${hovered ? 'opacity-100' : 'opacity-0'}`}
-        >
-          <Trash2 size={12} />
-        </button>
-      </div>
-    )
+function MainToolbar({ editor, onImageInsert, onVideoInsert }: {
+  editor: any
+  onImageInsert: () => void
+  onVideoInsert: () => void
+}) {
+  if (!editor) return null
+
+  const setLink = () => {
+    const prev = editor.getAttributes('link').href
+    const url = window.prompt('URL do link:', prev || 'https://')
+    if (url === null) return
+    if (url === '') { editor.chain().focus().unsetLink().run(); return }
+    editor.chain().focus().setLink({ href: url, target: '_blank' }).run()
   }
-
-  // ── Image / Video ──
-  if (block.type === 'image' || block.type === 'video') {
-    return (
-      <div
-        className="relative group rounded-2xl overflow-hidden border border-ink-100 dark:border-ink-800 bg-ink-50 dark:bg-ink-900"
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-      >
-        {block.content && block.type === 'image' && (
-          <div className="relative">
-            <img src={block.content} alt={block.caption} className="w-full max-h-80 object-cover" />
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-          </div>
-        )}
-        {block.content && block.type === 'video' && (
-          <div className="aspect-video bg-ink-950 flex items-center justify-center gap-3">
-            <Video size={24} className="text-ink-600" />
-            <span className="font-sans text-sm text-ink-400 truncate max-w-xs">{block.content}</span>
-          </div>
-        )}
-        <div className="p-4 space-y-2">
-          <input
-            value={block.content}
-            onChange={e => onChange(e.target.value, block.caption)}
-            placeholder={PLACEHOLDERS[block.type]}
-            className="w-full font-sans text-sm bg-white dark:bg-ink-800 border border-ink-150 dark:border-ink-700 rounded-xl px-3 py-2.5 text-ink-900 dark:text-ink-100 focus:outline-none focus:border-accent-400 transition-colors"
-          />
-          <input
-            value={block.caption || ''}
-            onChange={e => onChange(block.content, e.target.value)}
-            placeholder="Legenda (opcional)"
-            className="w-full font-sans text-xs bg-transparent border border-ink-100 dark:border-ink-800 rounded-xl px-3 py-2 text-ink-500 focus:outline-none focus:border-accent-400 transition-colors"
-          />
-        </div>
-        <button
-          onMouseDown={e => { e.preventDefault(); onDelete() }}
-          className={`absolute top-2 right-2 p-1.5 bg-white/90 dark:bg-ink-900/90 text-ink-500 hover:text-red-500 rounded-lg shadow-sm transition-all ${hovered ? 'opacity-100' : 'opacity-0'}`}
-        >
-          <Trash2 size={13} />
-        </button>
-      </div>
-    )
-  }
-
-  // ── Text blocks ──
-  const textStyles: Partial<Record<BlockType, string>> = {
-    paragraph:  'text-[1.0625rem] leading-[1.85] text-ink-800 dark:text-ink-200 font-body',
-    h2:         'text-2xl font-bold font-display text-ink-950 dark:text-ink-50 leading-tight',
-    h3:         'text-xl font-semibold font-display text-ink-900 dark:text-ink-100 leading-snug',
-    blockquote: 'text-lg italic text-ink-600 dark:text-ink-400 font-body leading-relaxed',
-    ul:         'text-[1.0625rem] leading-[1.85] text-ink-800 dark:text-ink-200 font-body',
-    ol:         'text-[1.0625rem] leading-[1.85] text-ink-800 dark:text-ink-200 font-body',
-  }
-
-  const conf = BLOCK_TYPES.find(t => t.type === block.type)
-  const Icon = conf?.icon || Type
 
   return (
-    <div
-      className="relative flex items-start gap-2"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      {/* Left actions */}
-      <div className={`flex flex-col items-center gap-0.5 pt-1.5 flex-shrink-0 transition-all duration-150 ${hovered ? 'opacity-100' : 'opacity-0'}`}>
-        <button
-          onMouseDown={e => { e.preventDefault(); onMoveUp() }}
-          disabled={isFirst}
-          className="p-1 text-ink-300 hover:text-ink-600 dark:hover:text-ink-300 disabled:opacity-20 rounded-lg transition-colors"
-        >
-          <ChevronDown size={12} className="rotate-180" />
-        </button>
-        <div className="relative">
-          <button
-            onMouseDown={e => { e.preventDefault() }}
-            onClick={() => setShowSlash(v => !v)}
-            className="p-1 text-ink-300 hover:text-accent-500 rounded-lg transition-colors"
-            title="Mudar tipo de bloco"
-          >
-            <Icon size={12} />
-          </button>
-          {showSlash && (
-            <SlashMenu
-              onSelect={type => { onTypeChange(type); setShowSlash(false) }}
-              onClose={() => setShowSlash(false)}
-            />
-          )}
-        </div>
-        <button
-          onMouseDown={e => { e.preventDefault(); onMoveDown() }}
-          disabled={isLast}
-          className="p-1 text-ink-300 hover:text-ink-600 dark:hover:text-ink-300 disabled:opacity-20 rounded-lg transition-colors"
-        >
-          <ChevronDown size={12} />
-        </button>
-      </div>
+    <div className="flex items-center gap-0.5 flex-wrap px-3 py-2 border-b border-ink-100 dark:border-ink-800 bg-white dark:bg-ink-900 sticky top-0 z-20">
 
-      {/* Block content */}
-      <div className={`flex-1 min-w-0 ${block.type === 'blockquote' ? 'border-l-[3px] border-accent-400 pl-5' : ''}`}>
-        <textarea
-          ref={textareaRef}
-          value={block.content}
-          onChange={e => { onChange(e.target.value); resize() }}
-          onKeyDown={e => {
-            if (e.key === '/' && block.content === '') {
-              e.preventDefault()
-              setShowSlash(true)
-            }
-            if (e.key === 'Enter' && !e.shiftKey && block.type !== 'ul' && block.type !== 'ol') {
-              e.preventDefault()
-              onAddAfter('paragraph')
-            }
-            if (e.key === 'Backspace' && block.content === '') {
-              e.preventDefault()
-              onDelete()
-            }
-          }}
-          placeholder={PLACEHOLDERS[block.type]}
-          rows={1}
-          className={`
-            w-full bg-transparent outline-none resize-none overflow-hidden
-            placeholder-ink-200 dark:placeholder-ink-700 caret-accent-500
-            ${textStyles[block.type] || ''}
-          `}
-          style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
-        />
-      </div>
+      {/* History */}
+      <ToolBtn onClick={() => editor.chain().focus().undo().run()} title="Desfazer (Ctrl+Z)" disabled={!editor.can().undo()}>
+        <RotateCcw size={14} />
+      </ToolBtn>
+      <ToolBtn onClick={() => editor.chain().focus().redo().run()} title="Refazer (Ctrl+Y)" disabled={!editor.can().redo()}>
+        <RotateCw size={14} />
+      </ToolBtn>
 
-      {/* Delete */}
-      <button
-        onMouseDown={e => { e.preventDefault(); onDelete() }}
-        className={`flex-shrink-0 mt-1.5 p-1.5 text-ink-200 hover:text-red-500 dark:text-ink-700 dark:hover:text-red-400 rounded-lg transition-all duration-150 ${hovered ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+      <ToolDivider />
+
+      {/* Headings */}
+      <ToolBtn
+        onClick={() => editor.chain().focus().setParagraph().run()}
+        active={editor.isActive('paragraph')}
+        title="Parágrafo"
       >
-        <Trash2 size={12} />
-      </button>
+        <Type size={14} />
+      </ToolBtn>
+      <ToolBtn
+        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+        active={editor.isActive('heading', { level: 2 })}
+        title="Título H2"
+      >
+        <Heading2 size={14} />
+      </ToolBtn>
+      <ToolBtn
+        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+        active={editor.isActive('heading', { level: 3 })}
+        title="Subtítulo H3"
+      >
+        <Heading3 size={14} />
+      </ToolBtn>
+
+      <ToolDivider />
+
+      {/* Inline formatting */}
+      <ToolBtn
+        onClick={() => editor.chain().focus().toggleBold().run()}
+        active={editor.isActive('bold')}
+        title="Negrito (Ctrl+B)"
+      >
+        <Bold size={14} />
+      </ToolBtn>
+      <ToolBtn
+        onClick={() => editor.chain().focus().toggleItalic().run()}
+        active={editor.isActive('italic')}
+        title="Itálico (Ctrl+I)"
+      >
+        <Italic size={14} />
+      </ToolBtn>
+      <ToolBtn
+        onClick={() => editor.chain().focus().toggleUnderline().run()}
+        active={editor.isActive('underline')}
+        title="Sublinhado (Ctrl+U)"
+      >
+        <UnderlineIcon size={14} />
+      </ToolBtn>
+      <ToolBtn
+        onClick={() => editor.chain().focus().toggleStrike().run()}
+        active={editor.isActive('strike')}
+        title="Tachado"
+      >
+        <Strikethrough size={14} />
+      </ToolBtn>
+
+      <ToolDivider />
+
+      {/* Alignment */}
+      <ToolBtn
+        onClick={() => editor.chain().focus().setTextAlign('left').run()}
+        active={editor.isActive({ textAlign: 'left' })}
+        title="Alinhar à esquerda"
+      >
+        <AlignLeft size={14} />
+      </ToolBtn>
+      <ToolBtn
+        onClick={() => editor.chain().focus().setTextAlign('center').run()}
+        active={editor.isActive({ textAlign: 'center' })}
+        title="Centralizar"
+      >
+        <AlignCenter size={14} />
+      </ToolBtn>
+      <ToolBtn
+        onClick={() => editor.chain().focus().setTextAlign('right').run()}
+        active={editor.isActive({ textAlign: 'right' })}
+        title="Alinhar à direita"
+      >
+        <AlignRight size={14} />
+      </ToolBtn>
+
+      <ToolDivider />
+
+      {/* Lists */}
+      <ToolBtn
+        onClick={() => editor.chain().focus().toggleBulletList().run()}
+        active={editor.isActive('bulletList')}
+        title="Lista com marcadores"
+      >
+        <List size={14} />
+      </ToolBtn>
+      <ToolBtn
+        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        active={editor.isActive('orderedList')}
+        title="Lista numerada"
+      >
+        <ListOrdered size={14} />
+      </ToolBtn>
+      <ToolBtn
+        onClick={() => editor.chain().focus().toggleBlockquote().run()}
+        active={editor.isActive('blockquote')}
+        title="Citação"
+      >
+        <Quote size={14} />
+      </ToolBtn>
+
+      <ToolDivider />
+
+      {/* Links & Media */}
+      <ToolBtn
+        onClick={setLink}
+        active={editor.isActive('link')}
+        title="Inserir link"
+      >
+        <LinkIcon size={14} />
+      </ToolBtn>
+      <ToolBtn onClick={onImageInsert} title="Inserir imagem">
+        <ImageIcon size={14} />
+      </ToolBtn>
+      <ToolBtn onClick={onVideoInsert} title="Inserir vídeo (YouTube/Vimeo)">
+        <span className="text-[10px] font-bold font-sans">YT</span>
+      </ToolBtn>
+      <ToolBtn
+        onClick={() => editor.chain().focus().setHorizontalRule().run()}
+        title="Linha divisória"
+      >
+        <Minus size={14} />
+      </ToolBtn>
     </div>
   )
 }
 
-// ─── Add Block Row ─────────────────────────────────────────────────────────────
+// ─── Bubble Menu (selection toolbar) ─────────────────────────────────────────
 
-function AddBlockRow({ onAdd }: { onAdd: (type: BlockType) => void }) {
-  const [open, setOpen] = useState(false)
-  const [hovered, setHovered] = useState(false)
-
+function SelectionToolbar({ editor }: { editor: any }) {
+  if (!editor) return null
   return (
-    <div
-      className="relative flex items-center gap-2 py-0.5 group"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+    <BubbleMenu
+      editor={editor}
+      tippyOptions={{ duration: 150, placement: 'top' }}
+      className="flex items-center gap-0.5 bg-ink-950 dark:bg-ink-800 border border-ink-800 dark:border-ink-700 rounded-xl shadow-2xl px-2 py-1.5"
     >
-      <div className={`flex-1 h-px bg-ink-100 dark:bg-ink-800 transition-opacity ${hovered ? 'opacity-100' : 'opacity-0'}`} />
       <button
-        onMouseDown={e => { e.preventDefault(); setOpen(v => !v) }}
-        className={`flex items-center gap-1.5 font-sans text-xs text-ink-400 hover:text-accent-600 dark:hover:text-accent-400 transition-all px-3 py-1.5 rounded-full border border-dashed border-ink-200 dark:border-ink-700 hover:border-accent-300 dark:hover:border-accent-700 hover:bg-accent-50 dark:hover:bg-accent-900/10 ${hovered ? 'opacity-100' : 'opacity-0'}`}
+        onMouseDown={e => { e.preventDefault(); editor.chain().focus().toggleBold().run() }}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('bold') ? 'text-accent-400' : 'text-ink-200 hover:text-white'}`}
+        title="Negrito"
       >
-        <Plus size={11} /> Adicionar bloco
+        <Bold size={13} />
       </button>
-      <div className={`flex-1 h-px bg-ink-100 dark:bg-ink-800 transition-opacity ${hovered ? 'opacity-100' : 'opacity-0'}`} />
-      {open && (
-        <SlashMenu
-          onSelect={type => { onAdd(type); setOpen(false) }}
-          onClose={() => setOpen(false)}
-        />
-      )}
-    </div>
+      <button
+        onMouseDown={e => { e.preventDefault(); editor.chain().focus().toggleItalic().run() }}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('italic') ? 'text-accent-400' : 'text-ink-200 hover:text-white'}`}
+        title="Itálico"
+      >
+        <Italic size={13} />
+      </button>
+      <button
+        onMouseDown={e => { e.preventDefault(); editor.chain().focus().toggleUnderline().run() }}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('underline') ? 'text-accent-400' : 'text-ink-200 hover:text-white'}`}
+        title="Sublinhado"
+      >
+        <UnderlineIcon size={13} />
+      </button>
+      <button
+        onMouseDown={e => { e.preventDefault(); editor.chain().focus().toggleStrike().run() }}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('strike') ? 'text-accent-400' : 'text-ink-200 hover:text-white'}`}
+        title="Tachado"
+      >
+        <Strikethrough size={13} />
+      </button>
+      <div className="w-px h-4 bg-ink-700 mx-0.5" />
+      <button
+        onMouseDown={e => {
+          e.preventDefault()
+          const url = window.prompt('URL:')
+          if (url) editor.chain().focus().setLink({ href: url, target: '_blank' }).run()
+        }}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('link') ? 'text-accent-400' : 'text-ink-200 hover:text-white'}`}
+        title="Link"
+      >
+        <LinkIcon size={13} />
+      </button>
+      <div className="w-px h-4 bg-ink-700 mx-0.5" />
+      <button
+        onMouseDown={e => { e.preventDefault(); editor.chain().focus().toggleHeading({ level: 2 }).run() }}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('heading', { level: 2 }) ? 'text-accent-400' : 'text-ink-200 hover:text-white'}`}
+      >
+        <Heading2 size={13} />
+      </button>
+      <button
+        onMouseDown={e => { e.preventDefault(); editor.chain().focus().toggleBlockquote().run() }}
+        className={`p-1.5 rounded-lg transition-colors ${editor.isActive('blockquote') ? 'text-accent-400' : 'text-ink-200 hover:text-white'}`}
+      >
+        <Quote size={13} />
+      </button>
+    </BubbleMenu>
   )
 }
 
-// ─── Sidebar Panel ─────────────────────────────────────────────────────────────
+// ─── Sidebar Section ──────────────────────────────────────────────────────────
 
 function SidebarSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -393,7 +297,7 @@ function SidebarSection({ title, children }: { title: string; children: React.Re
   )
 }
 
-const INPUT_CLS = "w-full font-sans text-sm bg-ink-50 dark:bg-ink-800 border border-ink-150 dark:border-ink-700 rounded-xl px-3 py-2.5 text-ink-900 dark:text-ink-100 focus:outline-none focus:border-accent-400 dark:focus:border-accent-500 transition-colors placeholder-ink-300 dark:placeholder-ink-600"
+const INPUT_CLS = "w-full font-sans text-sm bg-ink-50 dark:bg-ink-800 border border-ink-200 dark:border-ink-700 rounded-xl px-3 py-2.5 text-ink-900 dark:text-ink-100 focus:outline-none focus:border-accent-400 dark:focus:border-accent-500 transition-colors placeholder-ink-300 dark:placeholder-ink-600"
 
 // ─── Preview ─────────────────────────────────────────────────────────────────
 
@@ -408,6 +312,95 @@ function PreviewPane({ html, title, subtitle }: { html: string; title: string; s
   )
 }
 
+// ─── TipTap editor CSS (inject once) ─────────────────────────────────────────
+
+const TIPTAP_CSS = `
+.tiptap-editor .ProseMirror {
+  outline: none;
+  min-height: 40vh;
+  font-family: 'Lora', Georgia, serif;
+  font-size: 1.0625rem;
+  line-height: 1.85;
+  color: #3e3832;
+  caret-color: #4f46e5;
+}
+.dark .tiptap-editor .ProseMirror { color: #d8d3c7; }
+
+.tiptap-editor .ProseMirror p { margin-bottom: 1.2em; }
+.tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #c8c2b6;
+  pointer-events: none;
+  height: 0;
+  font-style: italic;
+}
+.dark .tiptap-editor .ProseMirror p.is-editor-empty:first-child::before { color: #4a4540; }
+
+.tiptap-editor .ProseMirror h2 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 1.65rem;
+  font-weight: 700;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  color: #1a1714;
+  line-height: 1.2;
+}
+.dark .tiptap-editor .ProseMirror h2 { color: #edeae3; }
+
+.tiptap-editor .ProseMirror h3 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: #2a2520;
+  line-height: 1.3;
+}
+.dark .tiptap-editor .ProseMirror h3 { color: #d8d3c7; }
+
+.tiptap-editor .ProseMirror blockquote {
+  border-left: 3px solid #6366f1;
+  padding-left: 1.25rem;
+  font-style: italic;
+  color: #6e6255;
+  margin: 1.5rem 0;
+}
+.dark .tiptap-editor .ProseMirror blockquote { color: #8a8070; border-color: #818cf8; }
+
+.tiptap-editor .ProseMirror ul { list-style: disc; padding-left: 1.5rem; margin-bottom: 1.2em; }
+.tiptap-editor .ProseMirror ol { list-style: decimal; padding-left: 1.5rem; margin-bottom: 1.2em; }
+.tiptap-editor .ProseMirror li { margin-bottom: 0.3em; }
+
+.tiptap-editor .ProseMirror a {
+  color: #4f46e5;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tiptap-editor .ProseMirror hr {
+  border: none;
+  border-top: 1px solid #e0dbd3;
+  margin: 2rem 0;
+}
+.dark .tiptap-editor .ProseMirror hr { border-color: #3a3530; }
+
+.tiptap-editor .ProseMirror img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 1rem 0;
+}
+
+.tiptap-editor .ProseMirror strong { font-weight: 700; }
+.tiptap-editor .ProseMirror em { font-style: italic; }
+.tiptap-editor .ProseMirror u { text-decoration: underline; text-underline-offset: 2px; }
+.tiptap-editor .ProseMirror s { text-decoration: line-through; }
+
+/* Selection */
+.tiptap-editor .ProseMirror ::selection { background: #e0e7ff; }
+.dark .tiptap-editor .ProseMirror ::selection { background: #312e81; }
+`
+
 // ─── Main Editor ──────────────────────────────────────────────────────────────
 
 export default function AdminPostEditor() {
@@ -415,6 +408,7 @@ export default function AdminPostEditor() {
   const navigate = useNavigate()
   const isNew = !id || id === 'novo'
   const fileRef = useRef<HTMLInputElement>(null)
+  const styleInjected = useRef(false)
 
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(!isNew)
@@ -424,14 +418,20 @@ export default function AdminPostEditor() {
   const [preview, setPreview] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
-  const [blocks, setBlocks] = useState<Block[]>([
-    { id: uid(), type: 'paragraph', content: '' }
-  ])
-
   const [form, setForm] = useState({
     title: '', subtitle: '', slug: '', excerpt: '', cover_image: '',
     category_id: '', tags: '', published: false, featured: false, reading_time: 1,
   })
+
+  // Inject TipTap CSS once
+  useEffect(() => {
+    if (styleInjected.current) return
+    styleInjected.current = true
+    const style = document.createElement('style')
+    style.textContent = TIPTAP_CSS
+    document.head.appendChild(style)
+    return () => { document.head.removeChild(style) }
+  }, [])
 
   const set = (key: keyof typeof form, value: any) => {
     setForm(f => {
@@ -441,16 +441,32 @@ export default function AdminPostEditor() {
     })
   }
 
-  const html = blocksToHtml(blocks)
+  // ── TipTap editor ──
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: { levels: [2, 3] },
+      }),
+      Underline,
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      Link.configure({ openOnClick: false }),
+      Image.configure({ inline: false }),
+      Placeholder.configure({
+        placeholder: 'Comece a escrever… selecione o texto para formatar, use a barra acima para inserir elementos.',
+      }),
+      CharacterCount,
+    ],
+    content: '',
+    onUpdate: ({ editor }) => {
+      const text = editor.getText()
+      setForm(f => ({ ...f, reading_time: estimateReadingTime(text) }))
+    },
+  })
 
-  useEffect(() => {
-    const text = blocks.map(b => b.content).join(' ')
-    setForm(f => ({ ...f, reading_time: estimateReadingTime(text) }))
-  }, [blocks])
-
+  // Load post data
   useEffect(() => {
     categoriesService.getAll().then(setCategories).catch(() => {})
-    if (!isNew) {
+    if (!isNew && editor) {
       postsService.getById(id!).then(post => {
         setForm({
           title: post.title || '', subtitle: post.subtitle || '', slug: post.slug || '',
@@ -459,65 +475,45 @@ export default function AdminPostEditor() {
           published: post.published || false, featured: post.featured || false,
           reading_time: post.reading_time || 1,
         })
-        setBlocks(htmlToBlocks(post.content || ''))
+        editor.commands.setContent(post.content || '')
       }).catch(() => navigate('/admin/artigos')).finally(() => setLoading(false))
     }
-  }, [id])
+  }, [id, editor])
 
-  const updateBlock = useCallback((bid: string, content: string, caption?: string) => {
-    setBlocks(bs => bs.map(b => b.id === bid ? { ...b, content, caption } : b))
-  }, [])
+  // Insert image
+  const handleInsertImage = () => {
+    const url = window.prompt('URL da imagem:')
+    if (url && editor) {
+      editor.chain().focus().setImage({ src: url }).run()
+    }
+  }
 
-  const deleteBlock = useCallback((bid: string) => {
-    setBlocks(bs => {
-      if (bs.length === 1) return [{ id: uid(), type: 'paragraph', content: '' }]
-      return bs.filter(b => b.id !== bid)
-    })
-  }, [])
+  // Insert video embed
+  const handleInsertVideo = () => {
+    const url = window.prompt('URL do YouTube ou Vimeo:')
+    if (!url || !editor) return
+    const embedUrl = getEmbedUrl(url)
+    if (!embedUrl) { alert('URL de vídeo inválida. Use YouTube ou Vimeo.'); return }
+    const html = buildEmbedHtml(url, 'Vídeo')
+    editor.chain().focus().insertContent(html).run()
+  }
 
-  const changeBlockType = useCallback((bid: string, type: BlockType) => {
-    setBlocks(bs => bs.map(b => b.id === bid ? { ...b, type } : b))
-  }, [])
-
-  const addBlockAfter = useCallback((bid: string, type: BlockType = 'paragraph') => {
-    const nb: Block = { id: uid(), type, content: '' }
-    setBlocks(bs => {
-      const idx = bs.findIndex(b => b.id === bid)
-      if (idx === -1) return [...bs, nb]
-      const next = [...bs]; next.splice(idx + 1, 0, nb); return next
-    })
-  }, [])
-
-  const addBlockAtEnd = useCallback((type: BlockType = 'paragraph') => {
-    setBlocks(bs => [...bs, { id: uid(), type, content: '' }])
-  }, [])
-
-  const moveBlock = useCallback((bid: string, dir: 'up' | 'down') => {
-    setBlocks(bs => {
-      const idx = bs.findIndex(b => b.id === bid)
-      if (idx === -1) return bs
-      const next = [...bs]; const target = dir === 'up' ? idx - 1 : idx + 1
-      if (target < 0 || target >= next.length) return bs
-      ;[next[idx], next[target]] = [next[target], next[idx]]
-      return next
-    })
-  }, [])
-
+  // Upload cover
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return
     setUploading(true)
     try { const url = await postsService.uploadCover(file); set('cover_image', url) }
-    catch { /* silently fail */ }
+    catch { /* ignore */ }
     finally { setUploading(false) }
   }
 
   const handleSave = async (publish?: boolean) => {
-    if (!form.title.trim()) return
+    if (!form.title.trim() || !editor) return
     setSaveStatus('saving'); setSaving(true)
     try {
       const data = {
         ...form,
-        content: html,
+        content: editor.getHTML(),
         tags: form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
         published: publish !== undefined ? publish : form.published,
       }
@@ -537,8 +533,7 @@ export default function AdminPostEditor() {
     }
   }
 
-  // Word count
-  const wordCount = blocks.map(b => b.content).join(' ').trim().split(/\s+/).filter(Boolean).length
+  const wordCount = editor?.storage.characterCount.words() ?? 0
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -560,21 +555,13 @@ export default function AdminPostEditor() {
             <ArrowLeft size={16} />
           </button>
           <div className="h-4 w-px bg-ink-200 dark:bg-ink-700" />
-          <div className="flex items-center gap-2">
-            <span className="font-sans text-sm text-ink-400 dark:text-ink-500">
-              {form.title || 'Sem título'}
-            </span>
-            {form.published && (
-              <span className="flex items-center gap-1 font-sans text-[10px] text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded-full">
-                <Globe size={9} /> Publicado
-              </span>
-            )}
-            {!form.published && !isNew && (
-              <span className="flex items-center gap-1 font-sans text-[10px] text-ink-400 bg-ink-100 dark:bg-ink-800 px-2 py-0.5 rounded-full">
-                <EyeOff size={9} /> Rascunho
-              </span>
-            )}
-          </div>
+          <span className="font-sans text-sm text-ink-400 dark:text-ink-500 max-w-xs truncate">
+            {form.title || 'Sem título'}
+          </span>
+          {form.published
+            ? <span className="flex items-center gap-1 font-sans text-[10px] text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded-full"><Globe size={9} /> Publicado</span>
+            : !isNew && <span className="flex items-center gap-1 font-sans text-[10px] text-ink-400 bg-ink-100 dark:bg-ink-800 px-2 py-0.5 rounded-full"><EyeOff size={9} /> Rascunho</span>
+          }
         </div>
 
         {/* Center stats */}
@@ -582,13 +569,10 @@ export default function AdminPostEditor() {
           <span>{wordCount} palavras</span>
           <span>·</span>
           <span>{form.reading_time} min de leitura</span>
-          <span>·</span>
-          <span>{blocks.length} blocos</span>
         </div>
 
         {/* Right */}
         <div className="flex items-center gap-2">
-          {/* Save status */}
           {saveStatus === 'saved' && (
             <span className="flex items-center gap-1.5 font-sans text-xs text-green-600 dark:text-green-400">
               <Check size={12} /> Salvo
@@ -596,24 +580,22 @@ export default function AdminPostEditor() {
           )}
           {saveStatus === 'error' && (
             <span className="flex items-center gap-1.5 font-sans text-xs text-red-500">
-              <X size={12} /> Erro
+              <X size={12} /> Erro ao salvar
             </span>
           )}
 
-          {/* Preview toggle */}
           <button
             onClick={() => setPreview(v => !v)}
             className={`flex items-center gap-1.5 font-sans text-xs px-3 py-1.5 rounded-lg border transition-all ${
               preview
                 ? 'border-accent-400 text-accent-600 dark:text-accent-400 bg-accent-50 dark:bg-accent-900/20'
-                : 'border-ink-200 dark:border-ink-700 text-ink-500 dark:text-ink-400 hover:border-ink-300'
+                : 'border-ink-200 dark:border-ink-700 text-ink-500 hover:border-ink-300'
             }`}
           >
             <Eye size={13} />
             {preview ? 'Editar' : 'Preview'}
           </button>
 
-          {/* Sidebar toggle */}
           <button
             onClick={() => setSidebarOpen(v => !v)}
             className={`p-1.5 rounded-lg border transition-all ${
@@ -621,14 +603,13 @@ export default function AdminPostEditor() {
                 ? 'border-accent-400 text-accent-600 bg-accent-50 dark:bg-accent-900/20 dark:text-accent-400'
                 : 'border-ink-200 dark:border-ink-700 text-ink-400'
             }`}
-            title="Configurações"
+            title="Configurações do artigo"
           >
             <Sparkles size={14} />
           </button>
 
           <div className="h-4 w-px bg-ink-200 dark:bg-ink-700" />
 
-          {/* Save draft */}
           <button
             onClick={() => handleSave(false)}
             disabled={saving || !form.title.trim()}
@@ -638,7 +619,6 @@ export default function AdminPostEditor() {
             Rascunho
           </button>
 
-          {/* Publish */}
           <button
             onClick={() => handleSave(true)}
             disabled={saving || !form.title.trim()}
@@ -654,77 +634,81 @@ export default function AdminPostEditor() {
       <div className="flex flex-1 overflow-hidden">
 
         {/* ── Editor / Preview ── */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto flex flex-col">
           {preview ? (
-            <div className="bg-white dark:bg-ink-900 min-h-full">
-              <PreviewPane html={html} title={form.title} subtitle={form.subtitle} />
+            <div className="bg-white dark:bg-ink-900 flex-1">
+              <PreviewPane html={editor?.getHTML() ?? ''} title={form.title} subtitle={form.subtitle} />
             </div>
           ) : (
-            <div className="max-w-2xl mx-auto py-12 px-8">
+            <div className="flex-1 bg-white dark:bg-ink-900 flex flex-col">
 
-              {/* Cover image preview strip */}
-              {form.cover_image && (
-                <div className="mb-8 -mx-8 overflow-hidden">
-                  <img src={form.cover_image} alt="Capa" className="w-full h-52 object-cover" />
-                </div>
-              )}
+              {/* Formatting Toolbar */}
+              <MainToolbar
+                editor={editor}
+                onImageInsert={handleInsertImage}
+                onVideoInsert={handleInsertVideo}
+              />
 
-              {/* Title */}
-              <div className="mb-1">
-                <textarea
-                  value={form.title}
-                  onChange={e => { set('title', e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }}
-                  placeholder="Título do artigo"
-                  rows={1}
-                  className="w-full font-display text-4xl font-bold text-ink-950 dark:text-ink-50 bg-transparent placeholder-ink-200 dark:placeholder-ink-700 outline-none resize-none overflow-hidden leading-tight"
-                  style={{ wordBreak: 'break-word' }}
-                />
-              </div>
+              {/* Bubble menu on selection */}
+              {editor && <SelectionToolbar editor={editor} />}
 
-              {/* Subtitle */}
-              <div className="mb-8">
-                <textarea
-                  value={form.subtitle}
-                  onChange={e => { set('subtitle', e.target.value); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }}
-                  placeholder="Subtítulo ou olho do texto (opcional)"
-                  rows={1}
-                  className="w-full font-display text-xl italic text-ink-400 dark:text-ink-500 bg-transparent placeholder-ink-200 dark:placeholder-ink-700 outline-none resize-none overflow-hidden leading-relaxed"
-                  style={{ wordBreak: 'break-word' }}
-                />
-              </div>
+              {/* Writing area */}
+              <div className="flex-1 overflow-y-auto">
+                <div className="max-w-2xl mx-auto py-10 px-8">
 
-              {/* Divider */}
-              <div className="flex items-center gap-3 mb-8">
-                <div className="w-8 h-0.5 bg-accent-400" />
-                <div className="w-2 h-0.5 bg-ink-200 dark:bg-ink-700" />
-              </div>
+                  {/* Cover preview */}
+                  {form.cover_image && (
+                    <div className="mb-8 -mx-8 overflow-hidden relative group">
+                      <img src={form.cover_image} alt="Capa" className="w-full h-52 object-cover" />
+                      <button
+                        onClick={() => set('cover_image', '')}
+                        className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  )}
 
-              {/* Blocks */}
-              <div className="space-y-1.5 min-h-[30vh]">
-                {blocks.map((block, idx) => (
-                  <div key={block.id}>
-                    <BlockEditor
-                      block={block}
-                      isFirst={idx === 0}
-                      isLast={idx === blocks.length - 1}
-                      onChange={(c, cap) => updateBlock(block.id, c, cap)}
-                      onDelete={() => deleteBlock(block.id)}
-                      onTypeChange={t => changeBlockType(block.id, t)}
-                      onAddAfter={t => addBlockAfter(block.id, t)}
-                      onMoveUp={() => moveBlock(block.id, 'up')}
-                      onMoveDown={() => moveBlock(block.id, 'down')}
-                    />
-                    <AddBlockRow onAdd={addBlockAtEnd} />
+                  {/* Title */}
+                  <textarea
+                    value={form.title}
+                    onChange={e => {
+                      set('title', e.target.value)
+                      e.target.style.height = 'auto'
+                      e.target.style.height = e.target.scrollHeight + 'px'
+                    }}
+                    placeholder="Título do artigo"
+                    rows={1}
+                    className="w-full font-display text-4xl font-bold text-ink-950 dark:text-ink-50 bg-transparent placeholder-ink-200 dark:placeholder-ink-700 outline-none resize-none overflow-hidden leading-tight mb-2 caret-accent-500"
+                    style={{ wordBreak: 'break-word' }}
+                  />
+
+                  {/* Subtitle */}
+                  <textarea
+                    value={form.subtitle}
+                    onChange={e => {
+                      set('subtitle', e.target.value)
+                      e.target.style.height = 'auto'
+                      e.target.style.height = e.target.scrollHeight + 'px'
+                    }}
+                    placeholder="Subtítulo ou olho do texto (opcional)"
+                    rows={1}
+                    className="w-full font-display text-xl italic text-ink-400 dark:text-ink-500 bg-transparent placeholder-ink-200 dark:placeholder-ink-700 outline-none resize-none overflow-hidden leading-relaxed mb-8 caret-accent-500"
+                    style={{ wordBreak: 'break-word' }}
+                  />
+
+                  {/* Decorative divider */}
+                  <div className="flex items-center gap-3 mb-8">
+                    <div className="w-8 h-0.5 bg-accent-400" />
+                    <div className="w-2 h-0.5 bg-ink-200 dark:bg-ink-700" />
                   </div>
-                ))}
-              </div>
 
-              {/* Bottom hint */}
-              <div className="mt-8 pt-6 border-t border-ink-100 dark:border-ink-800">
-                <p className="font-sans text-xs text-ink-300 dark:text-ink-700">
-                  Digite <kbd className="bg-ink-100 dark:bg-ink-800 px-1.5 py-0.5 rounded text-ink-400 font-mono">/</kbd> numa linha vazia para mudar o tipo de bloco.
-                  <kbd className="bg-ink-100 dark:bg-ink-800 px-1.5 py-0.5 rounded text-ink-400 font-mono ml-2">Enter</kbd> para novo parágrafo.
-                </p>
+                  {/* TipTap content area */}
+                  <div className="tiptap-editor">
+                    <EditorContent editor={editor} />
+                  </div>
+
+                </div>
               </div>
             </div>
           )}
@@ -736,44 +720,34 @@ export default function AdminPostEditor() {
             <div className="p-5 space-y-5">
 
               <SidebarSection title="Publicação">
-                <div className="space-y-2">
-                  {/* Published toggle */}
-                  <label className="flex items-center justify-between cursor-pointer p-2.5 rounded-xl hover:bg-ink-50 dark:hover:bg-ink-800 transition-colors">
-                    <div className="flex items-center gap-2">
-                      <Globe size={13} className="text-ink-400" />
-                      <span className="font-sans text-sm text-ink-700 dark:text-ink-300">Publicado</span>
-                    </div>
-                    <div
-                      onClick={() => set('published', !form.published)}
-                      className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${form.published ? 'bg-accent-500' : 'bg-ink-200 dark:bg-ink-700'}`}
-                    >
-                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${form.published ? 'left-4' : 'left-0.5'}`} />
-                    </div>
-                  </label>
-
-                  {/* Featured toggle */}
-                  <label className="flex items-center justify-between cursor-pointer p-2.5 rounded-xl hover:bg-ink-50 dark:hover:bg-ink-800 transition-colors">
-                    <div className="flex items-center gap-2">
-                      <Sparkles size={13} className="text-ink-400" />
-                      <span className="font-sans text-sm text-ink-700 dark:text-ink-300">Destaque</span>
-                    </div>
-                    <div
-                      onClick={() => set('featured', !form.featured)}
-                      className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative ${form.featured ? 'bg-accent-500' : 'bg-ink-200 dark:bg-ink-700'}`}
-                    >
-                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${form.featured ? 'left-4' : 'left-0.5'}`} />
-                    </div>
-                  </label>
+                <div className="space-y-1">
+                  {[
+                    { key: 'published', label: 'Publicado', icon: Globe },
+                    { key: 'featured', label: 'Destaque', icon: Sparkles },
+                  ].map(({ key, label, icon: Icon }) => (
+                    <label key={key} className="flex items-center justify-between cursor-pointer p-2.5 rounded-xl hover:bg-ink-50 dark:hover:bg-ink-800 transition-colors">
+                      <div className="flex items-center gap-2">
+                        <Icon size={13} className="text-ink-400" />
+                        <span className="font-sans text-sm text-ink-700 dark:text-ink-300">{label}</span>
+                      </div>
+                      <div
+                        onClick={() => set(key as any, !form[key as 'published' | 'featured'])}
+                        className={`w-9 h-5 rounded-full transition-colors cursor-pointer relative flex-shrink-0 ${form[key as 'published' | 'featured'] ? 'bg-accent-500' : 'bg-ink-200 dark:bg-ink-700'}`}
+                      >
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${form[key as 'published' | 'featured'] ? 'left-4' : 'left-0.5'}`} />
+                      </div>
+                    </label>
+                  ))}
                 </div>
               </SidebarSection>
 
               <SidebarSection title="Imagem de capa">
                 {form.cover_image ? (
-                  <div className="relative mb-2 rounded-xl overflow-hidden">
+                  <div className="relative mb-2 rounded-xl overflow-hidden group">
                     <img src={form.cover_image} alt="" className="w-full h-28 object-cover" />
                     <button
                       onClick={() => set('cover_image', '')}
-                      className="absolute top-1.5 right-1.5 p-1 bg-black/50 hover:bg-black/70 text-white rounded-lg transition-colors"
+                      className="absolute top-1.5 right-1.5 p-1 bg-black/50 hover:bg-black/70 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       <X size={12} />
                     </button>
@@ -783,14 +757,13 @@ export default function AdminPostEditor() {
                     onClick={() => fileRef.current?.click()}
                     className="w-full h-20 border-2 border-dashed border-ink-200 dark:border-ink-700 rounded-xl flex flex-col items-center justify-center gap-1.5 cursor-pointer hover:border-accent-400 hover:bg-accent-50 dark:hover:bg-accent-900/10 transition-all mb-2"
                   >
-                    {uploading ? (
-                      <Loader size={16} className="text-ink-400 animate-spin" />
-                    ) : (
-                      <>
-                        <Upload size={16} className="text-ink-400" />
-                        <span className="font-sans text-xs text-ink-400">Clique para fazer upload</span>
-                      </>
-                    )}
+                    {uploading
+                      ? <Loader size={16} className="text-ink-400 animate-spin" />
+                      : <>
+                          <Upload size={16} className="text-ink-400" />
+                          <span className="font-sans text-xs text-ink-400">Clique para fazer upload</span>
+                        </>
+                    }
                   </div>
                 )}
                 <input
@@ -833,7 +806,7 @@ export default function AdminPostEditor() {
                 <textarea
                   value={form.excerpt}
                   onChange={e => set('excerpt', e.target.value)}
-                  placeholder="Breve descrição exibida nos cards e no SEO…"
+                  placeholder="Breve descrição exibida nos cards…"
                   rows={3}
                   className={INPUT_CLS + ' resize-none'}
                 />
